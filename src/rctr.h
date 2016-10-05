@@ -7,15 +7,13 @@
  * @author: Sara Azinhal (ist181700)
  */
 
-/* Headers */
-#include <stdarg.h>
-
-
-
 /* Constants / Macros */
 /* Default ports */
 #define TCS_DEFAULT_PORT 58050
 #define TRS_DEFAULT_PORT 59050
+
+/* Packet size */
+#define PCKT_SIZE_MAX 2047
 
 /* General protocol error code strings */
 #define QUERY_INVALID "EOF" /* Query failed, bad spelling, wasn't found, ... */
@@ -44,15 +42,17 @@
 
 /* Error macros */
 /* Functional errors */
-#define E_GENERIC     0xFF
-#define E_INVALIDPORT 0x01
+#define E_GENERIC     0xFF /* Short-sized signed -1, unsigned 255 */
 
 /* GetOpt errors */
-#define E_MISSINGARG  0x10
-#define E_UNKNOWNOPT  0x11
-#define E_DUPARG      0x12
+#define E_INVALIDPORT 0x10 /* Port given as arg was invalid */
+#define E_MISSINGARG  0x11 /* Missing argument for option that required one */
+#define E_UNKNOWNOPT  0x12 /* Option unrecognized */
+#define E_DUPOPT      0x13 /* Duplicate option */
 
-
+/* Protocol errors */
+#define E_PROTINVALID  0x20 /* Valid response not found, wasn't available, .. */
+#define E_PROTQBADFORM 0x21 /* Protocol message's syntax was wrong */
 
 /* Prototypes */
 void printHelp (FILE *stream, const char *prog); /* Prints prog help */
