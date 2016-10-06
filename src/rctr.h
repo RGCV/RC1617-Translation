@@ -28,14 +28,14 @@
 
 /* User-TRS Protocol (in TCP) */
 #define UTRS_TRANSLATE_QUERY    "TRQ" /* after 'request' to TCS */
-#define UTRS_TRANSLATE_REPONSE  "TRR" /* TRS response with translation */
+#define UTRS_TRANSLATE_RESPONSE  "TRR" /* TRS response with translation */
 #define UTRS_TRANSLATE_NOTAVAIL "NTA" /* Requested translation not available */
 
 /* TRS-TCS Protocol (in UDP) */
 #define SERV_TRSREG_QUERY     "SRG" /* TRS registry query to TCS */
 #define SERV_TRSREG_RESPONSE  "SRR" /* TCS response to registry from TRS */
 #define SERV_TRSBYE_QUERY     "SUN" /* TRS unregistry query to TCS */
-#define SERV_TRSBYE_REPONSE   "SUR" /* TCS response to unregistry from TRS */
+#define SERV_TRSBYE_RESPONSE   "SUR" /* TCS response to unregistry from TRS */
 
 #define SERV_DEREGSTATUS_OK  "OK" /* Deregistry successful */
 #define SERV_DEREGSTATUS_NOK "NOK" /* Deregistry failed */
@@ -56,6 +56,17 @@
 
 /* Prototypes */
 void printHelp (FILE *stream, const char *prog); /* Prints prog help */
+
 void printUsage(FILE *stream, const char *prog); /* Prints prog usage */
+
 int  readArgv  (int argc, char **argv); /* Reads and processes args */
+
 int  eprintf   (const char *format, ...); /* Print to stderr */
+
+ssize_t rwrite(int fd, char *buffer, ssize_t size); /* Persistant write */
+
+ssize_t rread(int fd, char *buffer, ssize_t size); /* Persistant read */
+
+int udp_send_recv(int sockfd, void *buf, size_t len, size_t size,
+  struct sockaddr *dest_addr, socklen_t *addrlen, unsigned long delay);
+/* Send len bytes in buf and receive at most size bytes in buf */
