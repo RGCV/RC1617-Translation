@@ -12,6 +12,9 @@
 #define TCS_DEFAULT_PORT 58050
 #define TRS_DEFAULT_PORT 59050
 
+/* Language length */
+#define LANG_MAX_LEN 21
+
 /* Packet size */
 #define PCKT_SIZE_MAX 2047
 

@@ -27,7 +27,6 @@
 
 /* Constants */
 #define BUF_MAX_LEN 4095
-#define LANG_MAX_LEN 21
 
 #define CMD_EXIT "exit"
 #define CMD_LIST "list"
