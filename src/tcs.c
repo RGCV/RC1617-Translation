@@ -112,8 +112,8 @@ int main(int argc, char **argv) {
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
-        else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY" ",
-            sizeof(UTCS_NAMESERV_QUERY))) {
+        else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY,
+            sizeof(UTCS_NAMESERV_QUERY) - 1)) {
           trs_entry_t *node = NULL;
 
           strcpy(send_buffer, UTCS_NAMESERV_RESPONSE);
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
         }
       }
       else if(c == SERV_TRSREG_QUERY[0] || c == SERV_TRSBYE_QUERY[0]) {
-
+        /* TODO: Communication with TRS's */
       }
       else {
         sprintf(send_buffer, "%s", QUERY_BADFORM); /* ERR */
