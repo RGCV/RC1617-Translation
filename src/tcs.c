@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <netdb.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +21,15 @@
 
 
 
+/* Struct definitions */
+/* TRS server entry */
+struct trs_entry {
+  char name[LANG_MAX_LEN];
+  char *address;
+  unsigned short port;
+};
+
+
 /* Global variables */
 unsigned short TCSport; /* Port to bind TCS to */
 
@@ -27,7 +37,40 @@ unsigned short TCSport; /* Port to bind TCS to */
 
 /* Client main function */
 int main(int argc, char **argv) {
-  readArgv(argc, argv);
+  int ret; /* readArgv return code */
+  int sockfd; /* TCS UDP socket fd */
+  bool shouldRun = false;
+  struct sockaddr_in sockaddr; /* sockaddr */
+  socklen_t addrlen;
+
+  struct trs_entry **trs_entries;
+
+  TCSport = TCS_DEFAULT_PORT;
+
+  if((ret = readArgv(argc, argv))) {
+    printUsage(stderr, argv[0]);
+    exit(ret);
+  }
+
+  if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    perror("socket");
+    exit(E_GENERIC);
+  }
+
+  memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
+  sockaddr.sin_family = AF_INET;
+  inet_aton("0.0.0.0", (struct in_addr *)&sockaddr.sin_addr.s_addr);
+  sockaddr.sin_port = htons(TCSport);
+  addrlen = sizeof(sockaddr);
+
+  if(bind(sockfd, (struct sockaddr *)&sockaddr, addrlen) == -1) {
+    perror("bind");
+    close(sockfd);
+    exit(E_GENERIC);
+  }
+
+  trs_entries = (struct trs_entry **)malloc(5 * sizeof(struct trs_entry *));
+  
   return EXIT_SUCCESS;
 }
 
