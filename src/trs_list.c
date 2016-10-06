@@ -12,4 +12,11 @@
 
 struct trs_entry {
   char language[LANG_MAX_LEN];
+  char *address;
+  unsigned int port;
+  struct trs_entry *next;
+};
+
+struct trs_list {
+  struct trs_entry *head;
 };
