@@ -18,16 +18,8 @@
 #include <unistd.h>
 
 #include "rctr.h"
+#include "trs_list.h"
 
-
-
-/* Struct definitions */
-/* TRS server entry */
-struct trs_entry {
-  char name[LANG_MAX_LEN];
-  char *address;
-  unsigned short port;
-};
 
 
 /* Global variables */
@@ -43,7 +35,7 @@ int main(int argc, char **argv) {
   struct sockaddr_in sockaddr; /* sockaddr */
   socklen_t addrlen;
 
-  struct trs_entry **trs_entries;
+  trs_list_t *trs_list;
 
   TCSport = TCS_DEFAULT_PORT;
 
@@ -69,8 +61,11 @@ int main(int argc, char **argv) {
     exit(E_GENERIC);
   }
 
-  trs_entries = (struct trs_entry **)malloc(5 * sizeof(struct trs_entry *));
-  
+  trs_list = new_trs_list();
+
+
+  destroy_trs_list();
+
   return EXIT_SUCCESS;
 }
 
