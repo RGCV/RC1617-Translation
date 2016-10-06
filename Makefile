@@ -5,10 +5,10 @@ user: src/user.c src/rctr.h src/rctr.c
 	cd src && \
 	gcc -Wall -g -o ../bin/user rctr.c user.c
 
-tcs: src/tcs.c src/rctr.h src/rctr.c
+tcs: src/tcs.c src/trs_list.h src/trs_list.c src/rctr.h src/rctr.c
 	mkdir -p bin
 	cd src && \
-	gcc -Wall -g -o ../bin/tcs rctr.c tcs.c
+	gcc -Wall -g -o ../bin/tcs trs_list.c rctr.c tcs.c
 	
 clean:
 	rm -rf bin
