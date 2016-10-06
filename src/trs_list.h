@@ -7,8 +7,20 @@
  * @author: Sara Azinhal (ist181700)
  */
 
-typedef struct trs_entry trs_entry_t;
-typedef struct trs_list trs_list_t;
+#define LANG_MAX_LEN 21
+
+typedef struct trs_entry {
+  char language[LANG_MAX_LEN];
+  char *address;
+  unsigned int port;
+
+  struct trs_entry *next;
+} trs_entry_t;
+
+typedef struct trs_list {
+  size_t size;
+  struct trs_entry *head;
+} trs_list_t;
 
 trs_list_t *new_trs_list();
 
@@ -19,4 +31,4 @@ void remove_trs_entry(trs_list_t *trs_list, const char *language);
 
 trs_entry_t *get_trs_entry(trs_list_t *trs_list, const char *language);
 
-void destroy_trs_list(trs_list_t *trs_list);
+size_t destroy_trs_list(trs_list_t *trs_list);
