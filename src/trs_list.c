@@ -7,23 +7,16 @@
  * @author: Sara Azinhal (ist181700)
  */
 
-#include "rctr.h"
+#include <stdlib.h>
+#include <string.h>
+
 #include "trs_list.h"
 
-struct trs_entry {
-  char language[LANG_MAX_LEN];
-  char *address;
-  unsigned int port;
-  struct trs_entry *next;
-};
-
-struct trs_list {
-  struct trs_entry *head;
-};
 
 trs_list_t *new_trs_list() {
   trs_list_t *trs_list = (trs_list_t *)malloc(sizeof(struct trs_list));
   if(trs_list) {
+    trs_list->size = 0;
     trs_list->head = NULL;
   }
 
@@ -32,25 +25,22 @@ trs_list_t *new_trs_list() {
 
 void add_trs_entry(trs_list_t *trs_list, const char *language,
     const char *address, unsigned short port) {
-  trs_entry_t *node = trs_list->head, *temp = NULL;
+  trs_entry_t *node;
 
-  while(node) {
-    temp = node;
-    node = node->next;
-  }
   node = (trs_entry_t *)malloc(sizeof(struct trs_entry));
   if(node) {
     strncpy(node->language, language, LANG_MAX_LEN);
     node->address = strdup(address);
     node->port = port;
-    node->next = NULL;
-
-    if(temp) temp->next = node;
+    node->next = trs_list->head;
+    trs_list->head = node;
+    
+    trs_list->size++;
   }
 }
 
 void remove_trs_entry(trs_list_t *trs_list, const char *language) {
-  trs_entry_t *node = trs_list->head, *temp = NULL;
+  trs_entry_t *node = trs_list->head, *temp = node;
 
   while(node && strncmp(node->language, language, LANG_MAX_LEN)) {
     temp = node;
@@ -61,6 +51,8 @@ void remove_trs_entry(trs_list_t *trs_list, const char *language) {
       temp->next = node->next;
     free(node->address);
     free(node);
+
+    trs_list->size--;
   }
 }
 
@@ -70,7 +62,8 @@ trs_entry_t *get_trs_entry(trs_list_t *trs_list, const char *language) {
   return node;
 }
 
-void destroy_trs_list(trs_list_t *trs_list) {
+size_t destroy_trs_list(trs_list_t *trs_list) {
+  size_t size = trs_list->size;
   trs_entry_t *node = trs_list->head;
 
   while(node) {
@@ -82,4 +75,5 @@ void destroy_trs_list(trs_list_t *trs_list) {
   }
 
   free(trs_list);
+  return size;
 }
