@@ -7,9 +7,11 @@
  * @author: Sara Azinhal (ist181700)
  */
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,19 +33,22 @@ unsigned short TCSport; /* Port to bind TCS to */
 int main(int argc, char **argv) {
   int ret; /* readArgv return code */
   int sockfd; /* TCS UDP socket fd */
-  bool shouldRun = false;
+  bool shouldRun = true; /* should the loop be running flag */
   struct sockaddr_in sockaddr; /* sockaddr */
-  socklen_t addrlen;
+  socklen_t addrlen; /* Length of sockaddr */
 
-  trs_list_t *trs_list;
+  trs_list_t *trs_list; /* List of trs registries (languages available) */
 
+  /* Setup defaults */
   TCSport = TCS_DEFAULT_PORT;
 
+  /* Read and parse command line args */
   if((ret = readArgv(argc, argv))) {
     printUsage(stderr, argv[0]);
     exit(ret);
   }
 
+  /* Create socket for communication */
   if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
     perror("socket");
     exit(E_GENERIC);
@@ -55,16 +60,101 @@ int main(int argc, char **argv) {
   sockaddr.sin_port = htons(TCSport);
   addrlen = sizeof(sockaddr);
 
+  /* Bind the socket to TCSport */
   if(bind(sockfd, (struct sockaddr *)&sockaddr, addrlen) == -1) {
     perror("bind");
     close(sockfd);
     exit(E_GENERIC);
   }
 
+  /* Init trs_list */
   trs_list = new_trs_list();
 
+  add_trs_entry(trs_list, "Penis", "127.0.0.1", 12355);
 
-  destroy_trs_list();
+  while(shouldRun) {
+    char *delim = " \n\t"; /* Potential word delimiters */
+    char send_buffer[PCKT_SIZE_MAX]; /* Buffer used to send msgs */
+    char recv_buffer[PCKT_SIZE_MAX]; /* Buffer used to receive msgs */
+
+    if(recvfrom(sockfd, (void *)recv_buffer, PCKT_SIZE_MAX, 0,
+        (struct sockaddr *)&sockaddr, &addrlen) == -1) {
+      perror("recvfrom");
+      close(sockfd);
+      destroy_trs_list(trs_list);
+      exit(E_GENERIC);
+    }
+    else {
+      char c = recv_buffer[0]; /* First char to infer query and sender */
+
+      if(c == UTCS_LANG_QUERY[0] || c == UTCS_NAMESERV_QUERY[0]) {
+        if(!strncmp(recv_buffer, UTCS_LANG_QUERY,
+            sizeof(UTCS_LANG_QUERY) - 1)) {
+          trs_entry_t *node = trs_list->head;
+
+          strtok(recv_buffer, delim); /* Query msg not needed anymore */
+          strcpy(send_buffer, UTCS_LANG_RESPONSE);
+
+          /* Check languages exist */
+          if(trs_list->size > 0) {
+            sprintf(send_buffer, "%s %d", send_buffer, (int)trs_list->size);
+            while(node) {
+              sprintf(send_buffer, "%s %s", send_buffer, node->language);
+              node = node->next;
+            }
+          }
+          /* If there's more garbage at the end, respond with syntax error */
+          else if(strtok(NULL, delim) != NULL) {
+            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+          }
+          /* Else, if all failed, respond with an invalidation (not found) */
+          else {
+            sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
+          }
+        }
+        else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY" ",
+            sizeof(UTCS_NAMESERV_QUERY))) {
+          trs_entry_t *node = NULL;
+
+          strcpy(send_buffer, UTCS_NAMESERV_RESPONSE);
+          strtok(recv_buffer, delim); /* Query msg not needed anymore */
+
+          node = get_trs_entry(trs_list, strtok(NULL, delim));
+          if(node) {
+            if(strtok(NULL, delim) != NULL) {
+              sprintf(send_buffer, "%s %s %hu", send_buffer,
+                node->address, node->port);
+            }
+            else {
+              sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+            }
+          }
+          else {
+            sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
+          }
+        }
+      }
+      else if(c == SERV_TRSREG_QUERY[0] || c == SERV_TRSBYE_QUERY[0]) {
+
+      }
+      else {
+        sprintf(send_buffer, "%s", QUERY_BADFORM); /* ERR */
+      }
+
+      strcat(send_buffer, "\n"); /* Terminator (cap) */
+      if(sendto(sockfd, send_buffer, strlen(send_buffer), 0,
+          (struct sockaddr *)&sockaddr, addrlen) == -1) {
+        perror("sendto");
+        close(sockfd);
+        destroy_trs_list(trs_list);
+        exit(E_GENERIC);
+      }
+    }
+  }
+
+  /* Free resources */
+  close(sockfd);
+  destroy_trs_list(trs_list);
 
   return EXIT_SUCCESS;
 }
@@ -100,7 +190,7 @@ int readArgv(int argc, char **argv) {
 
         if(port) {
           eprintf("Port was already assigned: %hu\n", TCSport);
-          err = E_DUPARG;
+          err = E_DUPOPT;
         }
         else {
           val = strtol(optarg, &endptr, 10);
