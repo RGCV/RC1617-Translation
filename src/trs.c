@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
   socklen_t addrlen; /* Length of sockaddr */
 
   /* Setup defaults */
-  TCSname = gethostbyname("0.0.0.0");
+  TCSname = gethostbyname("localhost");
   TCSport = TCS_DEFAULT_PORT;
   TRSport = TRS_DEFAULT_PORT;
 
