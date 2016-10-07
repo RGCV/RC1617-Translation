@@ -24,11 +24,14 @@ typedef struct trs_list {
 
 trs_list_t *new_trs_list();
 
-void add_trs_entry(trs_list_t *trs_list, const char *language,
+int add_trs_entry(trs_list_t *trs_list, const char *language,
   const char *address, unsigned short port);
 
-void remove_trs_entry(trs_list_t *trs_list, const char *language);
+int remove_trs_entry(trs_list_t *trs_list, const char *language,
+  const char *address, unsigned short port);
 
-trs_entry_t *get_trs_entry(trs_list_t *trs_list, const char *language);
+trs_entry_t *get_trs_entry_lang(trs_list_t *trs_list, const char *language);
+
+trs_entry_t *get_trs_entry_addr(trs_list_t *trs_list, const char *address);
 
 size_t destroy_trs_list(trs_list_t *trs_list);

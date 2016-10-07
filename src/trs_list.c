@@ -23,29 +23,45 @@ trs_list_t *new_trs_list() {
   return trs_list;
 }
 
-void add_trs_entry(trs_list_t *trs_list, const char *language,
+int add_trs_entry(trs_list_t *trs_list, const char *language,
     const char *address, unsigned short port) {
-  trs_entry_t *node;
+  trs_entry_t *node = trs_list->head;
 
-  node = (trs_entry_t *)malloc(sizeof(struct trs_entry));
-  if(node) {
-    strncpy(node->language, language, LANG_MAX_LEN);
-    node->address = strdup(address);
-    node->port = port;
-    node->next = trs_list->head;
-    trs_list->head = node;
-    
-    trs_list->size++;
+  while(node &&
+      (!strncmp(node->language, language, LANG_MAX_LEN)
+      || (!strcmp(node->address, address) && node->port == port))) {
+    node = node->next;
   }
+  /* trs_entry wasn't found, add it */
+  if(!node) {
+    node = (trs_entry_t *)malloc(sizeof(struct trs_entry));
+    if(node) {
+      strncpy(node->language, language, LANG_MAX_LEN);
+      node->address = strdup(address);
+      node->port = port;
+      node->next = trs_list->head;
+      trs_list->head = node;
+
+      trs_list->size++;
+      return 0;
+    }
+  }
+
+  return -1;
 }
 
-void remove_trs_entry(trs_list_t *trs_list, const char *language) {
+int remove_trs_entry(trs_list_t *trs_list, const char *language,
+  const char *address, unsigned short port) {
   trs_entry_t *node = trs_list->head, *temp = node;
 
-  while(node && strncmp(node->language, language, LANG_MAX_LEN)) {
+  while(node &&
+      (strncmp(node->language, language, LANG_MAX_LEN)
+      || strcmp(node->address, address)
+      || node->port != port)) {
     temp = node;
     node = node->next;
   }
+  /* remove trs_entry if it exists */
   if(node) {
     if(node != temp)
       temp->next = node->next;
@@ -53,12 +69,25 @@ void remove_trs_entry(trs_list_t *trs_list, const char *language) {
     free(node);
 
     trs_list->size--;
+    return 0;
   }
+
+  return -1;
 }
 
-trs_entry_t *get_trs_entry(trs_list_t *trs_list, const char *language) {
+trs_entry_t *get_trs_entry_lang(trs_list_t *trs_list, const char *language) {
   trs_entry_t *node = trs_list->head;
-  while(node && strncmp(node->language, language, LANG_MAX_LEN));
+  while(node && strncmp(node->language, language, LANG_MAX_LEN)) {
+    node = node->next;
+  }
+  return node;
+}
+
+trs_entry_t *get_trs_entry_addr(trs_list_t *trs_list, const char *address) {
+  trs_entry_t *node = trs_list->head;
+  while(node && strcmp(node->address, address)) {
+    node = node->next;
+  }
   return node;
 }
 
