@@ -70,8 +70,6 @@ int main(int argc, char **argv) {
   /* Init trs_list */
   trs_list = new_trs_list();
 
-  add_trs_entry(trs_list, "Penis", "127.0.0.1", 12355);
-
   while(shouldRun) {
     char *delim = " \n\t"; /* Potential word delimiters */
     char send_buffer[PCKT_SIZE_MAX]; /* Buffer used to send msgs */
@@ -88,11 +86,12 @@ int main(int argc, char **argv) {
       char c = recv_buffer[0]; /* First char to infer query and sender */
 
       if(c == UTCS_LANG_QUERY[0] || c == UTCS_NAMESERV_QUERY[0]) {
+        /* Languages query */
         if(!strncmp(recv_buffer, UTCS_LANG_QUERY,
             sizeof(UTCS_LANG_QUERY) - 1)) {
           trs_entry_t *node = trs_list->head;
 
-          strtok(recv_buffer, delim); /* Query msg not needed anymore */
+          strtok(recv_buffer, delim); /* Query type not needed anymore */
           strcpy(send_buffer, UTCS_LANG_RESPONSE);
 
           /* Check languages exist */
@@ -112,36 +111,89 @@ int main(int argc, char **argv) {
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
+        /* TRS query */
         else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY,
             sizeof(UTCS_NAMESERV_QUERY) - 1)) {
           trs_entry_t *node = NULL;
 
           strcpy(send_buffer, UTCS_NAMESERV_RESPONSE);
-          strtok(recv_buffer, delim); /* Query msg not needed anymore */
+          strtok(recv_buffer, delim); /* Query type not needed anymore */
 
-          node = get_trs_entry(trs_list, strtok(NULL, delim));
-          if(node) {
+          /* If the server was found */
+          if((node = get_trs_entry_lang(trs_list, strtok(NULL, delim)))) {
+            /* And there's nothing else to read (msg has good form) */
             if(strtok(NULL, delim) != NULL) {
               sprintf(send_buffer, "%s %s %hu", send_buffer,
                 node->address, node->port);
             }
+            /* On syntax failure */
             else {
               sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
             }
           }
+          /* TRS for the queried language wasn't found */
           else {
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
+        /* Protocol message unrecognized */
+        else {
+          strcpy(send_buffer, QUERY_BADFORM); /* ERR */
+        }
       }
       else if(c == SERV_TRSREG_QUERY[0] || c == SERV_TRSBYE_QUERY[0]) {
-        /* TODO: Communication with TRS's */
+        char *address, *language;
+        unsigned short port;
+        /* TRS Registry */
+        if(!strncmp(recv_buffer, SERV_TRSREG_QUERY,
+            sizeof(SERV_TRSREG_QUERY) - 1)) {
+          strcpy(send_buffer, SERV_TRSREG_RESPONSE);
+
+          strtok(recv_buffer, delim); /* Query type not needed anymore */
+          language = strtok(NULL, delim);
+          address = strtok(NULL, delim);
+          port = (unsigned short)atoi(strtok(NULL, delim));
+
+          if(language && address && port > 0) {
+            if(add_trs_entry(trs_list, language, address, port) == 0)
+              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
+            else
+              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
+          }
+          else {
+            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+          }
+        }
+        /* TRS Unregistry */
+        else if(!strncmp(recv_buffer, SERV_TRSBYE_QUERY,
+            sizeof(SERV_TRSBYE_QUERY) - 1)) {
+          strcpy(send_buffer, SERV_TRSBYE_RESPONSE);
+
+          strtok(recv_buffer, delim); /* Query type not needed anymore */
+          language = strtok(NULL, delim);
+          address = strtok(NULL, delim);
+          port = (unsigned short)atoi(strtok(NULL, delim));
+
+          if(language && address && port > 0) {
+            if(remove_trs_entry(trs_list, language, address, port) == 0)
+              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
+            else
+              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
+          }
+          else {
+            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+          }
+        }
+        else {
+          strcpy(send_buffer, QUERY_BADFORM);
+        }
       }
+      /* Protocol message unrecognized */
       else {
         sprintf(send_buffer, "%s", QUERY_BADFORM); /* ERR */
       }
 
-      strcat(send_buffer, "\n"); /* Terminator (cap) */
+      strcat(send_buffer, "\n"); /* Terminator (cork) */
       if(sendto(sockfd, send_buffer, strlen(send_buffer), 0,
           (struct sockaddr *)&sockaddr, addrlen) == -1) {
         perror("sendto");
