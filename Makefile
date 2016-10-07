@@ -13,7 +13,7 @@ tcs: src/tcs.c src/trs_list.h src/trs_list.c src/rctr.h src/rctr.c
 trs: src/trs.c src/rctr.h src/rctr.c
 	mkdir -p bin
 	cd src && \
-	gcc -Wall -g -o ../bin/trs rctr.c tcs.c
+	gcc -Wall -g -o ../bin/trs rctr.c trs.c
 
 clean:
 	rm -rf bin
