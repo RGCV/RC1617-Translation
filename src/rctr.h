@@ -10,7 +10,7 @@
 /* Constants / Macros */
 /* Default ports */
 #define TCS_DEFAULT_PORT 58050
-#define TRS_DEFAULT_PORT 59050
+#define TRS_DEFAULT_PORT 59000
 
 /* Language length */
 #define LANG_MAX_LEN 21
