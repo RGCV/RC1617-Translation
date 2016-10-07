@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
             if(!strncmp(trs_buffer, UTRS_TRANSLATE_RESPONSE" ",
                 sizeof(UTRS_TRANSLATE_RESPONSE))) {
               /*t or f and a space or 1st 2 letters of error code */
-              rread(tsrfd, trs_buffer, 2);
+              rread(trsfd, trs_buffer, 2);
 
               switch(trs_buffer[0]) {
                 case 'f': {
