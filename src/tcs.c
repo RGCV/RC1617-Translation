@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
             ret = add_trs_entry(trs_list, language, address, port);
           }
           else {
-            ret = remove_trs_entry(trs_list, language, address, port)
+            ret = remove_trs_entry(trs_list, language, address, port);
           }
 
           if(ret == 0)
