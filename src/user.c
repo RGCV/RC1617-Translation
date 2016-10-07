@@ -120,17 +120,17 @@ int main(int argc, char **argv) {
                   break;
                 default:
                   eprintf("Invalid option. Available translations are \'text\' "
-                    "(t) or \'file\' (f).\n");
+                    "(t) or \'file\' (f)\n");
                   continue;
               }
             }
             else {
-              eprintf("Missing translation type argument (t or f).\n");
+              eprintf("Missing translation type argument (t or f)\n");
               continue;
             }
           }
           else {
-            eprintf("Invalid language index.\n");
+            eprintf("Invalid language index\n");
             continue;
           }
 
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
               }
             }
             else {
-              eprintf("%s: command malformed.\n", line_buffer);
+              eprintf("%s: command malformed\n", line_buffer);
               continue;
             }
           }
@@ -181,12 +181,12 @@ int main(int argc, char **argv) {
         }
         else {
           eprintf("No languages available yet. Try typing \'list\' to see a "
-            "list of available languages.\n");
+            "list of available languages\n");
           continue;
         }
       } /* Build translation request protocol query messages */
       else {
-        eprintf("%s: command not found or malformed.\n",
+        eprintf("%s: command not found or malformed\n",
           strtok(line_buffer, " \n"));
         continue;
       } /* Unknown command */
@@ -202,11 +202,11 @@ int main(int argc, char **argv) {
 
       /* Check if token matches an error code */
       if(!strncmp(msg, QUERY_INVALID, sizeof(QUERY_INVALID) - 1)) {
-        eprintf("Protocol error: No response available.\n");
+        eprintf("Protocol error: No response available\n");
         exit(E_PROTINVALID);
       }
       else if(!strncmp(msg, QUERY_BADFORM, sizeof(QUERY_BADFORM) - 1)) {
-        eprintf("Protocol error: Query had a bad form.\n");
+        eprintf("Protocol error: Query had a bad form\n");
         exit(E_PROTQBADFORM);
       }
       else {
@@ -292,8 +292,8 @@ int main(int argc, char **argv) {
             rread(trsfd, trs_buffer, sizeof(UTRS_TRANSLATE_RESPONSE));
             if(!strncmp(trs_buffer, UTRS_TRANSLATE_RESPONSE" ",
                 sizeof(UTRS_TRANSLATE_RESPONSE))) {
-              /*t or f and a space or 1st 2 letters of error code */
-              rread(trsfd, trs_buffer, 2);
+              /*t or f or 1st letter of error code */
+              rread(trsfd, trs_buffer, 1);
 
               switch(trs_buffer[0]) {
                 case 'f': {
@@ -301,17 +301,18 @@ int main(int argc, char **argv) {
                   break;
                 }
                 case 't': {
-                  /* TODO: Read words */
+                  rread(trsfd, trs_buffer, PCKT_SIZE_MAX);
+                  printf("%s", trs_buffer);
                   break;
                 }
                 default:
                   if(trs_buffer[0] == UTRS_TRANSLATE_NOTAVAIL[0]) {
-                    eprintf("No translation available.\n");
+                    eprintf("No translation available\n");
                     rread(trsfd, trs_buffer,
                       sizeof(UTRS_TRANSLATE_NOTAVAIL) - 2);
                   }
                   else if(trs_buffer[0] == QUERY_BADFORM[0]) {
-                    eprintf("Protocol error: Query had a bad form.\n");
+                    eprintf("Protocol error: Query had a bad form\n");
                     rread(trsfd, trs_buffer, sizeof(QUERY_BADFORM) - 2);
                     close(trsfd);
                     exit(E_GENERIC);
@@ -320,7 +321,7 @@ int main(int argc, char **argv) {
               }
             }
             else {
-              eprintf("Protocol error: Unrecognized response.\n");
+              eprintf("Protocol error: Unrecognized response\n");
 
               close(trsfd);
               exit(E_GENERIC);
@@ -329,7 +330,7 @@ int main(int argc, char **argv) {
           else {
             int err = errno;
             if(err == ECONNREFUSED || err == ENETUNREACH || err == ETIMEDOUT) {
-              eprintf("%s. Maybe try again later.\n", strerror(err));
+              eprintf("%s. Maybe try again later\n", strerror(err));
             }
             else {
               eprintf("connect: %s\n", strerror(err));
@@ -341,7 +342,7 @@ int main(int argc, char **argv) {
           close(trsfd);
         }
         else {
-          eprintf("Error: Unrecognized response from server, discarded.\n");
+          eprintf("Error: Unrecognized response from server discarded\n");
           exit(E_GENERIC);
         }
       }
@@ -366,11 +367,11 @@ int main(int argc, char **argv) {
 
 /* Function implementations */
 void printHelp(FILE *stream, const char *prog) {
-  fprintf(stream, "RC Translation - User client.\n");
+  fprintf(stream, "RC Translation - User client\n");
   printUsage(stream, prog);
   fprintf(stream,
     "Options:\n"
-    "\t-h    Shows this help message and exits.\n"
+    "\t-h    Shows this help message and exits\n"
     "\t-n    The TCS\' hostname, where TCSname is an IPv4 address\n"
     "\t      or a name (default: localhost)\n"
     "\t-p    The TCS\' port, in the range 0-65535 (default: TCSport = %hu)\n",
@@ -432,7 +433,7 @@ int readArgv(int argc, char **argv) {
         break;
       }
       case ':': /* Opt requires arg */
-        eprintf("Option \'-%c\' requires an argument.\n", optopt);
+        eprintf("Option \'-%c\' requires an argument\n", optopt);
         err = E_MISSINGARG;
         break;
       case '?': /* Unknown opt */
