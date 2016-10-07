@@ -84,11 +84,18 @@ int main(int argc, char **argv) {
     }
     else {
       char c = recv_buffer[0]; /* First char to infer query and sender */
+      struct hostent *client = gethostbyaddr((struct in_addr *)&sockaddr,
+        addrlen, AF_INET);
 
+      /* Query from user */
       if(c == UTCS_LANG_QUERY[0] || c == UTCS_NAMESERV_QUERY[0]) {
+        printf("Received languages query from %s:%hu\n",
+          client ? client->h_name : inet_ntoa(sockaddr.sin_addr),
+          ntohs(sockaddr.sin_port));
+
         /* Languages query */
-        if(!strncmp(recv_buffer, UTCS_LANG_QUERY,
-            sizeof(UTCS_LANG_QUERY) - 1)) {
+        if(!strncmp(recv_buffer, UTCS_LANG_QUERY"\n",
+            sizeof(UTCS_LANG_QUERY))) {
           trs_entry_t *node = trs_list->head;
 
           strtok(recv_buffer, delim); /* Query type not needed anymore */
@@ -101,19 +108,22 @@ int main(int argc, char **argv) {
               sprintf(send_buffer, "%s %s", send_buffer, node->language);
               node = node->next;
             }
+
           }
           /* If there's more garbage at the end, respond with syntax error */
           else if(strtok(NULL, delim) != NULL) {
+            eprintf("Protocol error: Query had a bad form\n");
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
           }
           /* Else, if all failed, respond with an invalidation (not found) */
           else {
+            eprintf("Protocol error: No response available\n");
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
         /* TRS query */
-        else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY,
-            sizeof(UTCS_NAMESERV_QUERY) - 1)) {
+        else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY" ",
+            sizeof(UTCS_NAMESERV_QUERY))) {
           trs_entry_t *node = NULL;
 
           strcpy(send_buffer, UTCS_NAMESERV_RESPONSE);
@@ -126,18 +136,21 @@ int main(int argc, char **argv) {
               sprintf(send_buffer, "%s %s %hu", send_buffer,
                 node->address, node->port);
             }
-            /* On syntax failure */
+            /* Query had syntax errors */
             else {
+              eprintf("Protocol error: Query had a bad form\n");
               sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
             }
           }
           /* TRS for the queried language wasn't found */
           else {
+            eprintf("Protocol error: No response available\n");
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
         /* Protocol message unrecognized */
         else {
+          eprintf("Protocol error: Unrecognized query\n");
           strcpy(send_buffer, QUERY_BADFORM); /* ERR */
         }
       }
@@ -145,6 +158,11 @@ int main(int argc, char **argv) {
         bool regEntry = false;
         char *address, *language;
         unsigned short port;
+
+        printf("Received TRS server registry query from %s:%hu\n",
+          client ? client->h_name : inet_ntoa(sockaddr.sin_addr),
+          ntohs(sockaddr.sin_port));
+
         /* TRS Registry */
         if(!strncmp(recv_buffer, SERV_TRSREG_QUERY,
             sizeof(SERV_TRSREG_QUERY) - 1)) {
@@ -157,6 +175,7 @@ int main(int argc, char **argv) {
           strcpy(send_buffer, SERV_TRSBYE_RESPONSE);
         }
         else {
+          eprintf("Protocol error: Unrecognized query\n");
           strcpy(send_buffer, QUERY_BADFORM);
         }
 
@@ -178,13 +197,16 @@ int main(int argc, char **argv) {
             sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
           else
             sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
+
+          printf("Request %s!\n", ret ? "Declined" : "Successful");
         }
         else {
           sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
         }
       }
-      /* Protocol message unrecognized */
+      /* Protocol message had syntax errors */
       else {
+        eprintf("Protocol error: Query had a bad form\n");
         sprintf(send_buffer, "%s", QUERY_BADFORM); /* ERR */
       }
 
@@ -209,11 +231,11 @@ int main(int argc, char **argv) {
 
 
 void printHelp(FILE *stream, const char *prog) {
-  fprintf(stream, "RC Translation - TCS (Translation Contact Server).\n");
+  fprintf(stream, "RC Translation - TCS (Translation Contact Server)\n");
   printUsage(stream, prog);
   fprintf(stream,
     "Options:\n"
-    "\t-h   Shows this help message and exits.\n"
+    "\t-h   Shows this help message and exits\n"
     "\t-p   The TCS\' port, in the range 0-65535 (default: TCSport = %hu)\n",
   TCS_DEFAULT_PORT);
 }
@@ -259,7 +281,7 @@ int readArgv(int argc, char **argv) {
         break;
       }
       case ':': /* Opt requires arg */
-        eprintf("Option \'-%c\' requires an argument.\n", optopt);
+        eprintf("Option \'-%c\' requires an argument\n", optopt);
         err = E_MISSINGARG;
         break;
       case '?': /* Unknown opt */
