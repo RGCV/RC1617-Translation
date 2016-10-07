@@ -142,50 +142,45 @@ int main(int argc, char **argv) {
         }
       }
       else if(c == SERV_TRSREG_QUERY[0] || c == SERV_TRSBYE_QUERY[0]) {
+        bool regEntry = false;
         char *address, *language;
         unsigned short port;
         /* TRS Registry */
         if(!strncmp(recv_buffer, SERV_TRSREG_QUERY,
             sizeof(SERV_TRSREG_QUERY) - 1)) {
+          regEntry = true;
           strcpy(send_buffer, SERV_TRSREG_RESPONSE);
-
-          strtok(recv_buffer, delim); /* Query type not needed anymore */
-          language = strtok(NULL, delim);
-          address = strtok(NULL, delim);
-          port = (unsigned short)atoi(strtok(NULL, delim));
-
-          if(language && address && port > 0) {
-            if(add_trs_entry(trs_list, language, address, port) == 0)
-              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
-            else
-              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
-          }
-          else {
-            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
-          }
         }
         /* TRS Unregistry */
         else if(!strncmp(recv_buffer, SERV_TRSBYE_QUERY,
             sizeof(SERV_TRSBYE_QUERY) - 1)) {
           strcpy(send_buffer, SERV_TRSBYE_RESPONSE);
-
-          strtok(recv_buffer, delim); /* Query type not needed anymore */
-          language = strtok(NULL, delim);
-          address = strtok(NULL, delim);
-          port = (unsigned short)atoi(strtok(NULL, delim));
-
-          if(language && address && port > 0) {
-            if(remove_trs_entry(trs_list, language, address, port) == 0)
-              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
-            else
-              sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
-          }
-          else {
-            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
-          }
         }
         else {
           strcpy(send_buffer, QUERY_BADFORM);
+        }
+
+        strtok(recv_buffer, delim); /* Query type not needed anymore */
+        language = strtok(NULL, delim);
+        address = strtok(NULL, delim);
+        port = (unsigned short)atoi(strtok(NULL, delim));
+
+        if(language && address && port > 0) {
+          int ret;
+          if(regEntry) {
+            ret = add_trs_entry(trs_list, language, address, port);
+          }
+          else {
+            ret = remove_trs_entry(trs_list, language, address, port)
+          }
+
+          if(ret == 0)
+            sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
+          else
+            sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
+        }
+        else {
+          sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
         }
       }
       /* Protocol message unrecognized */
