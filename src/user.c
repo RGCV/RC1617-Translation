@@ -89,17 +89,18 @@ int main(int argc, char **argv) {
     }
     /* Main program: User typed a command different than exit */
     else if(strncmp(line_buffer, CMD_EXIT"\n", sizeof(CMD_EXIT))) {
-      bool isText = false;
-      char *filename = NULL;
+      bool isText = false; /* To distinguish translation query types */
+      char *filename = NULL; /* If needed, will keep the file's name*/
 
       char *response, *msg, *line; /* Auxiliary variables for tokenizing */
       char tcs_buffer[PCKT_SIZE_MAX]; /* Used for user<->tcs communication*/
       char trs_buffer[PCKT_SIZE_MAX]; /* Used for user<->trs communication */
 
-      /* Parse and build messages to send to the TCS and TRS, if needed */
+      /* Build list protocol query message */
       if(!strncmp(line_buffer, CMD_LIST"\n", sizeof(CMD_LIST))) {
         strcpy(tcs_buffer, UTCS_LANG_QUERY"\n");
-      } /* Build list protocol query message */
+      }
+      /* Build translation request protocol query messages */
       else if(!strncmp(line_buffer, CMD_REQ" ", sizeof(CMD_REQ))) {
         /* Check if user already requested the list of languages */
         if(languages) {
@@ -124,6 +125,7 @@ int main(int argc, char **argv) {
                   continue;
               }
             }
+            /* Missing arg for translation type */
             else {
               eprintf("Missing translation type argument (t or f)\n");
               continue;
@@ -139,7 +141,7 @@ int main(int argc, char **argv) {
           sprintf(trs_buffer, "%s %s", trs_buffer,
             strtok_r(line, delim, &line)); /* t or f */
 
-          /* Save the filename for later */
+          /* Shape msg based on translation type */
           if(isText) {
             /* Let's count some words */
             strcpy(aux_buffer, line);
@@ -160,11 +162,13 @@ int main(int argc, char **argv) {
                 aux_token = strtok(NULL, delim);
               }
             }
+            /* Didnt find a valid token */
             else {
               eprintf("%s: command malformed\n", line_buffer);
               continue;
             }
           }
+          /* Stat file for its size in bytes */
           else {
             /* File information struct */
             struct stat fst;
@@ -184,12 +188,13 @@ int main(int argc, char **argv) {
             "list of available languages\n");
           continue;
         }
-      } /* Build translation request protocol query messages */
+      }
+      /* Unknown command */
       else {
         eprintf("%s: command not found or malformed\n",
           strtok(line_buffer, " \n"));
         continue;
-      } /* Unknown command */
+      }
 
       /* Query TCS and receive a response */
       if(udp_send_recv(tcsfd, tcs_buffer, strlen(tcs_buffer), PCKT_SIZE_MAX,
@@ -250,16 +255,22 @@ int main(int argc, char **argv) {
 
           if((connect(trsfd, (struct sockaddr *)&trsaddr,
               sizeof(trsaddr))) != -1) {
+            size_t offset = 0; /* bytes read offset */
+
+            /* Send initial message (full, if text translation) */
             rwrite(trsfd, trs_buffer, strlen(trs_buffer));
+            /* Send file */
             if(!isText) {
               FILE *sendfp;
               struct stat fst;
 
               if((sendfp = fopen(filename, "r")) == NULL) {
                 perror("fopen");
+                exit(E_GENERIC);
               }
               else if(stat(filename, &fst) == -1) {
                 perror("stat");
+                exit(E_GENERIC);
               }
               else {
                 size_t filesize = fst.st_size;
@@ -271,9 +282,6 @@ int main(int argc, char **argv) {
 
                   if(ferror(sendfp)) {
                     perror("fread");
-
-                    close(trsfd);
-                    fclose(sendfp);
                     exit(E_GENERIC);
                   }
 
@@ -289,31 +297,57 @@ int main(int argc, char **argv) {
             rwrite(trsfd, "\n", 1);
 
             /* Read the protocol message code */
-            rread(trsfd, trs_buffer, sizeof(UTRS_TRANSLATE_RESPONSE));
+            offset += rread(trsfd, &trs_buffer[offset],
+              sizeof(UTRS_TRANSLATE_RESPONSE));
+
             if(!strncmp(trs_buffer, UTRS_TRANSLATE_RESPONSE" ",
                 sizeof(UTRS_TRANSLATE_RESPONSE))) {
-              /*t or f or 1st letter of error code */
-              rread(trsfd, trs_buffer, 1);
+              char c;
 
-              switch(trs_buffer[0]) {
+              /*t or f or 1st letter of error code */
+              offset += rread(trsfd, &trs_buffer[offset], 1);
+
+              switch(c = trs_buffer[offset - 1]) {
+                /* File translation */
                 case 'f': {
                   /* TODO: Read file */
                   break;
                 }
+                /* Text translation */
                 case 't': {
-                  rread(trsfd, trs_buffer, PCKT_SIZE_MAX);
+                  int n, digits = 1;
+
+                  offset += rread(trsfd, &trs_buffer[offset], 2); /* ' ' */
+                  while(trs_buffer[offset - 1] != ' ') {
+                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ++digits;
+                  }
+                  n = atoi(&trs_buffer[offset - digits]); /* number of words */
+                  rread(trsfd, &trs_buffer[offset], 1); /* ' ', start of word */
+
+                  strcpy(trs_buffer, "Translation Successful: ");
+                  offset = strlen(trs_buffer);
+
+                  while(n > 0) {
+                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    if(trs_buffer[offset - 1] == ' ') --n;
+                  }
+
+                  /* Read the terminator (\n), if all went well */
+                  rread(trsfd, &trs_buffer[offset], 1);
                   printf("%s", trs_buffer);
                   break;
                 }
+                /* Error code */
                 default:
-                  if(trs_buffer[0] == UTRS_TRANSLATE_NOTAVAIL[0]) {
+                  if(c == UTRS_TRANSLATE_NOTAVAIL[0]) {
                     eprintf("No translation available\n");
                     rread(trsfd, trs_buffer,
-                      sizeof(UTRS_TRANSLATE_NOTAVAIL) - 2);
+                      sizeof(UTRS_TRANSLATE_NOTAVAIL) - 1);
                   }
-                  else if(trs_buffer[0] == QUERY_BADFORM[0]) {
+                  else if(c == QUERY_BADFORM[0]) {
                     eprintf("Protocol error: Query had a bad form\n");
-                    rread(trsfd, trs_buffer, sizeof(QUERY_BADFORM) - 2);
+                    rread(trsfd, trs_buffer, sizeof(QUERY_BADFORM) - 1);
                     close(trsfd);
                     exit(E_GENERIC);
                   }
@@ -327,14 +361,17 @@ int main(int argc, char **argv) {
               exit(E_GENERIC);
             }
           }
+          /* Connection to trs server failed */
           else {
             int err = errno;
+
+            /* If the connection was refused,  .. prompt to try later */
             if(err == ECONNREFUSED || err == ENETUNREACH || err == ETIMEDOUT) {
               eprintf("%s. Maybe try again later\n", strerror(err));
             }
+            /* If not, just print error message and exit */
             else {
               eprintf("connect: %s\n", strerror(err));
-              close(trsfd);
               exit(E_GENERIC);
             }
           }
