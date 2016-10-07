@@ -40,8 +40,8 @@
 #define SERV_TRSBYE_QUERY     "SUN" /* TRS unregistry query to TCS */
 #define SERV_TRSBYE_RESPONSE   "SUR" /* TCS response to unregistry from TRS */
 
-#define SERV_DEREGSTATUS_OK  "OK" /* Deregistry successful */
-#define SERV_DEREGSTATUS_NOK "NOK" /* Deregistry failed */
+#define SERV_STATUS_OK  "OK" /* Registry/Deregistry successful */
+#define SERV_STATUS_NOK "NOK" /* Registry/Deregistry failed */
 
 /* Error macros */
 /* Functional errors */
