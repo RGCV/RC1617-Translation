@@ -7,24 +7,38 @@
  * @author: Sara Azinhal (ist181700)
  */
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
 #include <netdb.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "rctr.h"
+#include "rctr.h" /* common header */
+
+
+
+/* Constants */
+#define FILE_TEXT_TR "text_translation.txt"
+#define FILE_FILE_TR "file_translation.txt"
+
 
 /* Global variables */
-volatile int interrupted = 0; /*  */
+volatile bool interrupted = false; /* flag to determine if SIGINT was issued */
 
 struct hostent *TCSname; /* TCS hostent struct */
 unsigned short TRSport, TCSport; /* TRS and TCS ports */
 char TRSlanguage[LANG_MAX_LEN]; /* The language TRS provides translation for */
+
+
+
+/* Function prototypes */
+void handle_signal(int signo); /* Signal handling function*/
 
 
 
@@ -33,17 +47,74 @@ int main(int argc, char **argv) {
   int ret; /* readArgv return code */
   int tcsfd; /* TCS UDP socket fd */
   bool shouldRun = true; /* should the loop be running flag */
+
+  FILE *filesfp, *textfp; /* translation files streams */
+
   struct sockaddr_in sockaddr; /* sockaddr */
   socklen_t addrlen; /* Length of sockaddr */
 
+  /* Signal handling */
+  struct sigaction sa;
+  sa.sa_handler = handle_signal; /* signal handler function */
+  sigemptyset(&sa.sa_mask); /* empty sa struct's signal mask */
+  sa.sa_flags = SA_RESTART; /* interrupted functions will restart */
+
+  /* if signal action registry fails */
+  if(sigaction(SIGINT, &sa, NULL) == -1) {
+    perror("sigaction");
+    exit(E_GENERIC);
+  }
+
   /* Setup defaults */
-  TCSname = gethostbyname("localhost");
+  char name[PCKT_SIZE_MAX];
+  gethostname(name, sizeof(name));
+  printf("%s\n", name);
+  TCSname = gethostbyname(name);
   TCSport = TCS_DEFAULT_PORT;
   TRSport = TRS_DEFAULT_PORT;
 
+  /* Read and parse command line args */
   if((ret = readArgv(argc, argv))) {
     printUsage(stderr, argv[0]);
     exit(ret);
+  }
+
+  /* Create socket for communication */
+  if((tcsfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    perror("socket");
+    exit(E_GENERIC);
+  }
+
+  memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
+  sockaddr.sin_family = AF_INET;
+  inet_aton(TCSname->h_addr_list[0], (struct in_addr *)&sockaddr.sin_addr.s_addr);
+  sockaddr.sin_port = htons(TRSport);
+  addrlen = sizeof(sockaddr);
+
+  /* Bind the socket to TRSport */
+  if(bind(tcsfd, (struct sockaddr *)&sockaddr, addrlen) == -1) {
+    perror("bind");
+    exit(E_GENERIC);
+  }
+
+  /* Try and open translation files */
+  if((textfp = fopen(FILE_TEXT_TR, "r")) == NULL
+      || (filesfp = fopen(FILE_FILE_TR, "r")) == NULL) {
+    perror("fopen");
+    exit(E_GENERIC);
+  }
+
+  /* TRS main loop */
+  while(shouldRun) {
+    if(interrupted) {
+      struct in_addr addr;
+      memcpy((void *)&addr, (void *)TCSname->h_addr_list[0], sizeof(addr));
+      eprintf("\rInterrupted! %s\n", inet_ntoa(addr));
+      shouldRun = false;
+    }
+    else {
+
+    }
   }
 
   return EXIT_SUCCESS;
@@ -52,6 +123,13 @@ int main(int argc, char **argv) {
 
 
 /* Function implementations */
+void handle_signal(int signo) {
+  switch(signo) {
+    case SIGINT: interrupted = true;
+    default: break;
+  }
+}
+
 void printHelp(FILE *stream, const char *prog) {
   fprintf(stream, "RC Translation - TRS (Translation Contact Server)\n");
   printUsage(stream, prog);
