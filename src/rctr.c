@@ -35,7 +35,7 @@ ssize_t rwrite(int fd, char *buffer, ssize_t size) {
   while(size > 0) {
     ssize_t nbytes = 0;
 
-    if((nbytes = write(fd, buffer + offset, size - offset)) == -1) {
+    if((nbytes = write(fd, &buffer[offset], size - offset)) == -1) {
       perror("write");
       close(fd);
       exit(E_GENERIC);
@@ -54,7 +54,7 @@ ssize_t rread(int fd, char *buffer, ssize_t size) {
   while(size > 0) {
     ssize_t nbytes = 0;
 
-    if((nbytes = read(fd, buffer + offset, size - offset)) == -1) {
+    if((nbytes = read(fd, &buffer[offset], size - offset)) == -1) {
       perror("read");
       close(fd);
       exit(E_GENERIC);

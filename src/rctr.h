@@ -12,11 +12,14 @@
 #define TCS_DEFAULT_PORT 58050
 #define TRS_DEFAULT_PORT 59000
 
+/* Max file name size */
+#define FILE_MAX_LEN 0xFF /* 255 */
+
 /* Language length */
 #define LANG_MAX_LEN 21
 
 /* Packet size */
-#define PCKT_SIZE_MAX 2047
+#define PCKT_SIZE_MAX 0x7FF /* 2047 */
 
 /* General protocol error code strings */
 #define QUERY_INVALID "EOF" /* Query failed, bad spelling, wasn't found, ... */
@@ -31,14 +34,14 @@
 
 /* User-TRS Protocol (in TCP) */
 #define UTRS_TRANSLATE_QUERY    "TRQ" /* after 'request' to TCS */
-#define UTRS_TRANSLATE_RESPONSE  "TRR" /* TRS response with translation */
+#define UTRS_TRANSLATE_RESPONSE "TRR" /* TRS response with translation */
 #define UTRS_TRANSLATE_NOTAVAIL "NTA" /* Requested translation not available */
 
 /* TRS-TCS Protocol (in UDP) */
-#define SERV_TRSREG_QUERY     "SRG" /* TRS registry query to TCS */
-#define SERV_TRSREG_RESPONSE  "SRR" /* TCS response to registry from TRS */
-#define SERV_TRSBYE_QUERY     "SUN" /* TRS unregistry query to TCS */
-#define SERV_TRSBYE_RESPONSE   "SUR" /* TCS response to unregistry from TRS */
+#define SERV_TRSREG_QUERY    "SRG" /* TRS registry query to TCS */
+#define SERV_TRSREG_RESPONSE "SRR" /* TCS response to registry from TRS */
+#define SERV_TRSBYE_QUERY    "SUN" /* TRS unregistry query to TCS */
+#define SERV_TRSBYE_RESPONSE "SUR" /* TCS response to unregistry from TRS */
 
 #define SERV_STATUS_OK  "OK" /* Registry/Deregistry successful */
 #define SERV_STATUS_NOK "NOK" /* Registry/Deregistry failed */
@@ -58,13 +61,13 @@
 #define E_PROTQBADFORM 0x21 /* Protocol message's syntax was wrong */
 
 /* Prototypes */
-void printHelp (FILE *stream, const char *prog); /* Prints prog help */
+void printHelp(FILE *stream, const char *prog); /* Prints prog help */
 
 void printUsage(FILE *stream, const char *prog); /* Prints prog usage */
 
-int  readArgv  (int argc, char **argv); /* Reads and processes args */
+int readArgv(int argc, char **argv); /* Reads and processes args */
 
-int  eprintf   (const char *format, ...); /* Print to stderr */
+int eprintf(const char *format, ...); /* Print to stderr */
 
 ssize_t rwrite(int fd, char *buffer, ssize_t size); /* Persistant write */
 
