@@ -10,6 +10,7 @@
 /* Headers */
 #include <arpa/inet.h>
 #include <errno.h>
+#include <libgen.h>
 #include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -90,10 +91,10 @@ int main(int argc, char **argv) {
     /* Main program: User typed a command different than exit */
     else if(strncmp(line_buffer, CMD_EXIT"\n", sizeof(CMD_EXIT))) {
       bool isText = false; /* To distinguish translation query types */
-      char *filename = NULL; /* If needed, will keep the file's name*/
+      char filename[FILE_MAX_LEN]; /* If needed, will keep a file's name */
 
       char *response, *msg, *line; /* Auxiliary variables for tokenizing */
-      char tcs_buffer[PCKT_SIZE_MAX]; /* Used for user<->tcs communication*/
+      char tcs_buffer[PCKT_SIZE_MAX]; /* Used for user<->tcs communication */
       char trs_buffer[PCKT_SIZE_MAX]; /* Used for user<->trs communication */
 
       /* Build list protocol query message */
@@ -173,13 +174,14 @@ int main(int argc, char **argv) {
             /* File information struct */
             struct stat fst;
 
-            filename = strtok(line, delim);
+            strncpy(filename, strtok(line, delim), FILE_MAX_LEN - 1);
+            filename[FILE_MAX_LEN] = '\0'; /* Good measure */
             if(stat(filename, &fst) == -1) {
               perror("stat");
               exit(E_GENERIC);
             }
 
-            sprintf(trs_buffer, "%s %s %ld ", trs_buffer, filename,
+            sprintf(trs_buffer, "%s %s %ld ", trs_buffer, basename(filename),
               fst.st_size);
           }
         }
@@ -253,6 +255,7 @@ int main(int argc, char **argv) {
             exit(E_GENERIC);
           }
 
+          /* TCP communication with the TRS */
           if((connect(trsfd, (struct sockaddr *)&trsaddr,
               sizeof(trsaddr))) != -1) {
             size_t offset = 0; /* bytes read offset */
@@ -297,13 +300,13 @@ int main(int argc, char **argv) {
             rwrite(trsfd, "\n", 1);
 
             /* Read the protocol message code */
-            memset((void *)trs_buffer, (int)'\0', PCKT_SIZE_MAX);
             offset += rread(trsfd, &trs_buffer[offset],
               sizeof(UTRS_TRANSLATE_RESPONSE));
 
             if(!strncmp(trs_buffer, UTRS_TRANSLATE_RESPONSE" ",
                 sizeof(UTRS_TRANSLATE_RESPONSE))) {
               char c;
+              size_t len = 0; /* for parsing filesize or # of words */
 
               /*t or f or 1st letter of error code */
               offset += rread(trsfd, &trs_buffer[offset], 1);
@@ -311,19 +314,67 @@ int main(int argc, char **argv) {
               switch(c = trs_buffer[offset - 1]) {
                 /* File translation */
                 case 'f': {
-                  /* TODO: Read file */
+                  FILE *readfp;
+                  size_t filesize;
+
+                  /* filename start */
+                  offset += rread(trsfd, &trs_buffer[offset], 2);
+                  while(trs_buffer[offset - 1] != ' ') {
+                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ++len;
+                  }
+
+                  /* The file's name */
+                  strncpy(filename,  &trs_buffer[offset - len - 1], len);
+                  if((readfp = fopen(filename, "w")) == NULL) {
+                    perror("fopen");
+                    exit(E_GENERIC);
+                  }
+
+                  len = 0;
+                  /* file size start */
+                  offset += rread(trsfd, &trs_buffer[offset], 1);
+                  while(trs_buffer[offset - 1] != ' ') {
+                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ++len;
+                  }
+
+                  /* The file's size */
+                  filesize =
+                    (size_t)strtoll(&trs_buffer[offset - len - 1], NULL, 10);
+
+                  /* Read the file */
+                  while(filesize > 0) {
+                    offset = rread(trsfd, trs_buffer,
+                      filesize > PCKT_SIZE_MAX ? PCKT_SIZE_MAX : filesize);
+                    filesize -= offset;
+                    while(offset > 0) {
+                      size_t nbytes = fwrite((void *)trs_buffer, sizeof(char),
+                        offset, readfp);
+                      offset -= nbytes;
+
+                      if(ferror(readfp)) {
+                        perror("ferror");
+                        exit(E_GENERIC);
+                      }
+                    }
+                  }
+
+                  /* Terminator (cork) */
+                  rread(trsfd, trs_buffer, 1);
+                  if(readfp) fclose(readfp);
                   break;
                 }
                 /* Text translation */
                 case 't': {
-                  int n, digits = 0;
+                  int n;
 
                   offset += rread(trsfd, &trs_buffer[offset], 2); /* ' #' */
                   while(trs_buffer[offset - 1] != ' ') {
                     offset += rread(trsfd, &trs_buffer[offset], 1);
-                    ++digits;
+                    ++len;
                   }
-                  n = atoi(&trs_buffer[offset - digits - 1]); /* # of words */
+                  n = atoi(&trs_buffer[offset - len - 1]); /* # of words */
 
                   strcpy(trs_buffer, "Translation Successful: ");
                   offset = strlen(trs_buffer);
@@ -349,7 +400,6 @@ int main(int argc, char **argv) {
                   else if(c == QUERY_BADFORM[0]) {
                     eprintf("Protocol error: Query had a bad form\n");
                     rread(trsfd, trs_buffer, sizeof(QUERY_BADFORM) - 1);
-                    close(trsfd);
                     exit(E_GENERIC);
                   }
                   break;
@@ -357,8 +407,6 @@ int main(int argc, char **argv) {
             }
             else {
               eprintf("Protocol error: Unrecognized response\n");
-
-              close(trsfd);
               exit(E_GENERIC);
             }
           }
