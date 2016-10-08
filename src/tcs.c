@@ -90,8 +90,7 @@ int main(int argc, char **argv) {
       /* Query from user */
       if(c == UTCS_LANG_QUERY[0] || c == UTCS_NAMESERV_QUERY[0]) {
         printf("Received languages query from %s:%hu\n",
-          client ? client->h_name : inet_ntoa(sockaddr.sin_addr),
-          ntohs(sockaddr.sin_port));
+          inet_ntoa(sockaddr.sin_addr), ntohs(sockaddr.sin_port));
 
         /* Languages query */
         if(!strncmp(recv_buffer, UTCS_LANG_QUERY"\n",
