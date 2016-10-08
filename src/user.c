@@ -297,6 +297,7 @@ int main(int argc, char **argv) {
             rwrite(trsfd, "\n", 1);
 
             /* Read the protocol message code */
+            memset((void *)trs_buffer, (int)'\0', PCKT_SIZE_MAX);
             offset += rread(trsfd, &trs_buffer[offset],
               sizeof(UTRS_TRANSLATE_RESPONSE));
 
@@ -315,26 +316,26 @@ int main(int argc, char **argv) {
                 }
                 /* Text translation */
                 case 't': {
-                  int n, digits = 1;
+                  int n, digits = 0;
 
-                  offset += rread(trsfd, &trs_buffer[offset], 2); /* ' ' */
+                  offset += rread(trsfd, &trs_buffer[offset], 2); /* ' #' */
                   while(trs_buffer[offset - 1] != ' ') {
                     offset += rread(trsfd, &trs_buffer[offset], 1);
                     ++digits;
                   }
-                  n = atoi(&trs_buffer[offset - digits]); /* number of words */
-                  rread(trsfd, &trs_buffer[offset], 1); /* ' ', start of word */
+                  n = atoi(&trs_buffer[offset - digits - 1]); /* # of words */
 
                   strcpy(trs_buffer, "Translation Successful: ");
                   offset = strlen(trs_buffer);
 
                   while(n > 0) {
                     offset += rread(trsfd, &trs_buffer[offset], 1);
-                    if(trs_buffer[offset - 1] == ' ') --n;
+                    switch(trs_buffer[offset - 1]) {
+                      case  ' ':
+                      case '\n': --n;
+                    }
                   }
 
-                  /* Read the terminator (\n), if all went well */
-                  rread(trsfd, &trs_buffer[offset], 1);
                   printf("%s", trs_buffer);
                   break;
                 }
