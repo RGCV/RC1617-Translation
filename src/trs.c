@@ -66,9 +66,6 @@ int main(int argc, char **argv) {
   }
 
   /* Setup defaults */
-  char name[PCKT_SIZE_MAX];
-  gethostname(name, sizeof(name));
-  printf("%s\n", name);
   TCSname = gethostbyname(name);
   TCSport = TCS_DEFAULT_PORT;
   TRSport = TRS_DEFAULT_PORT;
@@ -107,9 +104,7 @@ int main(int argc, char **argv) {
   /* TRS main loop */
   while(shouldRun) {
     if(interrupted) {
-      struct in_addr addr;
-      memcpy((void *)&addr, (void *)TCSname->h_addr_list[0], sizeof(addr));
-      eprintf("\rInterrupted! %s\n", inet_ntoa(addr));
+      eprintf("\rInterrupted!\n");
       shouldRun = false;
     }
     else {
