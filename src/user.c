@@ -27,8 +27,6 @@
 
 
 /* Constants */
-#define BUF_MAX_LEN 4095
-
 #define CMD_EXIT "exit"
 #define CMD_LIST "list"
 #define CMD_REQ  "request"
@@ -67,7 +65,6 @@ int main(int argc, char **argv) {
     exit(E_GENERIC);
   }
 
-  /* Format and fill in tcsaddr's fields accordingly */
   memset((void *)&tcsaddr, (int)'\0', sizeof(tcsaddr));
   tcsaddr.sin_family      = AF_INET;
   tcsaddr.sin_addr.s_addr =
@@ -78,13 +75,13 @@ int main(int argc, char **argv) {
   /* Main loop */
   while(shouldRun) {
     char *delim = " \n\t"; /* Potential word delimiters */
-    char line_buffer[BUF_MAX_LEN]; /* Used for user input processing */
+    char line_buffer[LINE_MAX_LEN]; /* Used for user input processing */
 
     /* Prompt */
     printf("> ");
 
     /* Upon EOF (or C-d) */
-    if(fgets(line_buffer, BUF_MAX_LEN, stdin) == NULL) {
+    if(fgets(line_buffer, LINE_MAX_LEN, stdin) == NULL) {
       printf(CMD_EXIT"\n");
       shouldRun = false;
     }
@@ -217,8 +214,8 @@ int main(int argc, char **argv) {
         exit(E_PROTQBADFORM);
       }
       else {
-        if(!strncmp(response, UTCS_LANG_RESPONSE,
-            sizeof(UTCS_LANG_RESPONSE) - 1)) {
+        if(!strncmp(response, UTCS_LANG_RESPONSE" ",
+            sizeof(UTCS_LANG_RESPONSE))) {
           int i, n = atoi(strtok(msg, delim));
 
           if(languages) {
@@ -237,8 +234,8 @@ int main(int argc, char **argv) {
 
           languages[i] = NULL;
         }
-        else if(!strncmp(response, UTCS_NAMESERV_RESPONSE,
-            sizeof(UTCS_NAMESERV_RESPONSE) - 1)) {
+        else if(!strncmp(response, UTCS_NAMESERV_RESPONSE" ",
+            sizeof(UTCS_NAMESERV_RESPONSE))) {
           int trsfd;
           struct sockaddr_in trsaddr;
 
