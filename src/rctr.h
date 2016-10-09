@@ -19,7 +19,7 @@
 #define LANG_MAX_LEN 21
 
 /* Line length */
-#define LINE_MAX_LEN 0xFF /* 255 */
+#define LINE_MAX_LEN 0x1FF /* 512 */
 
 /* File name max length */
 #define FILE_MAX_LEN 0xFF /* 255 */
