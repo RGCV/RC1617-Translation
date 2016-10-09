@@ -35,10 +35,16 @@ ssize_t rwrite(int fd, char *buffer, ssize_t size) {
   while(size > 0) {
     ssize_t nbytes = 0;
 
-    if((nbytes = write(fd, &buffer[offset], size - offset)) == -1) {
-      perror("write");
-      close(fd);
-      exit(E_GENERIC);
+    if((nbytes = write(fd, &buffer[offset], size)) == -1) {
+      if(errno == EPIPE) {
+        eprintf("Broken pipe: Connection closed\n");
+        return -1;
+      }
+      else {
+        perror("write");
+        close(fd);
+        exit(E_GENERIC);
+      }
     }
 
     size -= nbytes;
@@ -54,10 +60,16 @@ ssize_t rread(int fd, char *buffer, ssize_t size) {
   while(size > 0) {
     ssize_t nbytes = 0;
 
-    if((nbytes = read(fd, &buffer[offset], size - offset)) == -1) {
-      perror("read");
-      close(fd);
-      exit(E_GENERIC);
+    if((nbytes = read(fd, &buffer[offset], size)) == -1) {
+      if(errno == EPIPE) {
+        eprintf("Broken pipe: Connection closed\n");
+        return -1;
+      }
+      else {
+        perror("read");
+        close(fd);
+        exit(E_GENERIC);
+      }
     }
 
     size -= nbytes;
