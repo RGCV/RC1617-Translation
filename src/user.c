@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -74,7 +75,6 @@ int main(int argc, char **argv) {
 
   /* Main loop */
   while(shouldRun) {
-    char *delim = " \n\t"; /* Potential word delimiters */
     char line_buffer[LINE_MAX_LEN]; /* Used for user input processing */
 
     /* Prompt */
@@ -90,9 +90,9 @@ int main(int argc, char **argv) {
       bool isText = false; /* To distinguish translation query types */
       char filename[FILE_MAX_LEN]; /* If needed, will keep a file's name */
 
-      char *response, *msg, *line; /* Auxiliary variables for tokenizing */
-      char tcs_buffer[PCKT_SIZE_MAX]; /* Used for user<->tcs communication */
-      char trs_buffer[PCKT_SIZE_MAX]; /* Used for user<->trs communication */
+      char *token; /* Auxiliary variables for tokenizing */
+      char tcs_buffer[PCKT_MAX_SIZE]; /* Used for user<->tcs communication */
+      char trs_buffer[PCKT_MAX_SIZE]; /* Used for user<->trs communication */
 
       /* Build list protocol query message */
       if(!strncmp(line_buffer, CMD_LIST"\n", sizeof(CMD_LIST))) {
@@ -103,15 +103,17 @@ int main(int argc, char **argv) {
         /* Check if user already requested the list of languages */
         if(languages) {
           int n;
-          char aux_buffer[BUF_MAX_LEN];
-          char *aux_token;
 
+          /* Start setting up communication buffers */
           strcpy(tcs_buffer, UTCS_NAMESERV_QUERY);
+          strcpy(trs_buffer, UTRS_TRANSLATE_QUERY);
 
-          strtok_r(line_buffer, delim, &line); /* 'request' not needed */
-          if((n = atoi(strtok_r(line, delim, &line))) > 0 && languages[n - 1]) {
-            if(line) {
-              switch(line[0]) {
+          strtok(line_buffer, "\n"); /* Remove trailing \n */
+
+          strtok_r(line_buffer, " ", &token); /* 'request' not needed */
+          if((n = atoi(strtok_r(token, " ", &token))) > 0 && languages[n - 1]) {
+            if(token) {
+              switch(token[0]) {
                 case 't':
                   isText = true;
                 case 'f':
@@ -129,53 +131,54 @@ int main(int argc, char **argv) {
               continue;
             }
           }
+          /* n < 0 or languages[n - 1] doesn't exist */
           else {
             eprintf("Invalid language index\n");
             continue;
           }
 
           n = 0;
-          strcpy(trs_buffer, UTRS_TRANSLATE_QUERY);
           sprintf(trs_buffer, "%s %s", trs_buffer,
-            strtok_r(line, delim, &line)); /* t or f */
+            strtok_r(token, " ", &token)); /* t or f */
 
-          /* Shape msg based on translation type */
+          /* Build message for text translation */
           if(isText) {
+            char buffer[LINE_MAX_LEN];
+
             /* Let's count some words */
-            strcpy(aux_buffer, line);
-            aux_token = strtok(aux_buffer, delim);
-            while(aux_token && strlen(aux_token) > 0) {
+            strcpy(buffer, token);
+            token = strtok(token, " ");
+            while(token) {
               ++n;
-              aux_token = strtok(NULL, delim);
+              token = strtok(NULL, " ");
             }
 
             /* More than one 'valid' token was found */
             if(n > 0) {
               sprintf(trs_buffer, "%s %d", trs_buffer, n);
 
-              aux_token = strtok(line, delim);
-              while(aux_token) {
-                sprintf(trs_buffer, "%s %s", trs_buffer, aux_token);
-
-                aux_token = strtok(NULL, delim);
+              token = strtok(buffer, " ");
+              while(token) {
+                sprintf(trs_buffer, "%s %s", trs_buffer, token);
+                token = strtok(NULL, " ");
               }
             }
-            /* Didnt find a valid token */
+            /* Didn't find a valid token */
             else {
               eprintf("%s: command malformed\n", line_buffer);
               continue;
             }
           }
-          /* Stat file for its size in bytes */
+          /* Build for file otherwise */
           else {
             /* File information struct */
             struct stat fst;
 
-            strncpy(filename, strtok(line, delim), FILE_MAX_LEN - 1);
+            strncpy(filename, strtok(token, " "), FILE_MAX_LEN - 1);
             filename[FILE_MAX_LEN] = '\0'; /* Good measure */
             if(stat(filename, &fst) == -1) {
               perror("stat");
-              exit(E_GENERIC);
+              continue;
             }
 
             sprintf(trs_buffer, "%s %s %ld ", trs_buffer, basename(filename),
@@ -195,28 +198,30 @@ int main(int argc, char **argv) {
         continue;
       }
 
-      /* Query TCS and receive a response */
-      if(udp_send_recv(tcsfd, tcs_buffer, strlen(tcs_buffer), PCKT_SIZE_MAX,
-          (struct sockaddr *)&tcsaddr, &addrlen, 5) != EXIT_SUCCESS) {
+      /* Query TCS and receive a response (5 second timeout) */
+      if(udp_send_recv(tcsfd, tcs_buffer, strlen(tcs_buffer),
+          sizeof(tcs_buffer) / sizeof(char), (struct sockaddr *)&tcsaddr,
+          &addrlen, 5) != EXIT_SUCCESS) {
         exit(E_GENERIC);
       }
 
-      /* Get the server  */
-      response = strtok_r(tcs_buffer, delim, &msg);
+      /* Get the server's response */
+      strtok(tcs_buffer, "\n"); /* Remove trailing \n (terminator) */
+      strtok_r(tcs_buffer, " ", &token); /* Point to the rest of the args */
 
       /* Check if token matches an error code */
-      if(!strncmp(msg, QUERY_INVALID, sizeof(QUERY_INVALID) - 1)) {
+      if(!strncmp(token, QUERY_INVALID, sizeof(QUERY_INVALID) - 1)) {
         eprintf("Protocol error: No response available\n");
         exit(E_PROTINVALID);
       }
-      else if(!strncmp(msg, QUERY_BADFORM, sizeof(QUERY_BADFORM) - 1)) {
+      else if(!strncmp(token, QUERY_BADFORM, sizeof(QUERY_BADFORM) - 1)) {
         eprintf("Protocol error: Query had a bad form\n");
         exit(E_PROTQBADFORM);
       }
       else {
-        if(!strncmp(response, UTCS_LANG_RESPONSE" ",
-            sizeof(UTCS_LANG_RESPONSE))) {
-          int i, n = atoi(strtok(msg, delim));
+        if(!strncmp(tcs_buffer, UTCS_LANG_RESPONSE,
+            sizeof(UTCS_LANG_RESPONSE) - 1)) {
+          int i, n = atoi(strtok(token, " "));
 
           if(languages) {
             for(i = 0; languages[i] != NULL; ++i)
@@ -226,45 +231,54 @@ int main(int argc, char **argv) {
           languages = (char **)malloc((n + 1) * sizeof(char *));
 
           for(i = 0; i < n; ++i) {
-            if((msg = strtok(NULL, " \n"))) {
-              languages[i] = strndup(msg, LANG_MAX_LEN - 1);
-              printf(" %d - %s\n", i + 1, msg);
+            if((token = strtok(NULL, " "))) {
+              languages[i] = strndup(token, LANG_MAX_LEN - 1);
+              printf(" %d - %s\n", i + 1, token);
             }
           }
 
           languages[i] = NULL;
         }
-        else if(!strncmp(response, UTCS_NAMESERV_RESPONSE" ",
-            sizeof(UTCS_NAMESERV_RESPONSE))) {
+        else if(!strncmp(tcs_buffer, UTCS_NAMESERV_RESPONSE,
+            sizeof(UTCS_NAMESERV_RESPONSE) - 1)) {
           int trsfd;
           struct sockaddr_in trsaddr;
+          void (*old_handler)(int); /* old SIGPIPE sighandler */
 
-          /* Format and setup of the sockaddr struct */
-          memset((void *)&trsaddr, (int)'\0', sizeof(trsaddr));
-          trsaddr.sin_family = AF_INET;
-          inet_aton(strtok(msg, delim),
-            (struct in_addr *)&trsaddr.sin_addr.s_addr);
-          trsaddr.sin_port = htons((unsigned short)atoi(strtok(NULL, delim)));
+          /* If SIGPIPE can't be ignored */
+          if((old_handler = signal(SIGPIPE, SIG_IGN)) == SIG_ERR) {
+            perror("Failed to ignore SIGPIPE");
+            exit(E_GENERIC);
+          }
 
-          /* TRS TCP socket */
+          /* Setup TRS TCP socket */
           if((trsfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
             perror("socket");
             exit(E_GENERIC);
           }
 
+          memset((void *)&trsaddr, (int)'\0', sizeof(trsaddr));
+          trsaddr.sin_family = AF_INET;
+          inet_aton(strtok(token, " "),
+            (struct in_addr *)&trsaddr.sin_addr.s_addr);
+          trsaddr.sin_port = htons((unsigned short)atoi(strtok(NULL, " ")));
+
           /* TCP communication with the TRS */
           if((connect(trsfd, (struct sockaddr *)&trsaddr,
               sizeof(trsaddr))) != -1) {
-            size_t offset = 0; /* bytes read offset */
+            ssize_t ret; /* Return from rwrite or rread */
+            ssize_t offset = 0; /* bytes read offset */
 
             /* Send initial message (full, if text translation) */
-            rwrite(trsfd, trs_buffer, strlen(trs_buffer));
+            ret = rwrite(trsfd, trs_buffer, strlen(trs_buffer));
+            if(ret == -1) continue; /* EPIPE */
+
             /* Send file */
             if(!isText) {
               FILE *sendfp;
               struct stat fst;
 
-              if((sendfp = fopen(filename, "r")) == NULL) {
+              if((sendfp = fopen(filename, "rb")) == NULL) {
                 perror("fopen");
                 exit(E_GENERIC);
               }
@@ -276,8 +290,8 @@ int main(int argc, char **argv) {
                 size_t filesize = fst.st_size;
 
                 while(filesize > 0) {
-                  size_t sendlen = (filesize > PCKT_SIZE_MAX
-                    ? PCKT_SIZE_MAX : filesize);
+                  size_t sendlen = (filesize > PCKT_MAX_SIZE
+                    ? PCKT_MAX_SIZE : filesize);
                   size_t nbytes = fread((void *)trs_buffer, 1, sendlen, sendfp);
 
                   if(ferror(sendfp)) {
@@ -285,20 +299,24 @@ int main(int argc, char **argv) {
                     exit(E_GENERIC);
                   }
 
-                  rwrite(trsfd, trs_buffer, sendlen);
+                  ret = rwrite(trsfd, trs_buffer, sendlen);
+                  if(ret == -1) break;
                   filesize -= nbytes;
                 }
 
-                if(sendfp) fclose(sendfp);
+                fclose(sendfp);
               }
             }
+            if(ret == -1) continue; /* EPIPE */
 
             /* Terminator (cork) */
-            rwrite(trsfd, "\n", 1);
+            ret = rwrite(trsfd, "\n", 1);
+            if(ret == -1) continue; /* EPIPE */
 
             /* Read the protocol message code */
-            offset += rread(trsfd, &trs_buffer[offset],
+            ret = rread(trsfd, &trs_buffer[offset],
               sizeof(UTRS_TRANSLATE_RESPONSE));
+            if(ret == -1) continue; /* EPIPE */
 
             if(!strncmp(trs_buffer, UTRS_TRANSLATE_RESPONSE" ",
                 sizeof(UTRS_TRANSLATE_RESPONSE))) {
@@ -306,85 +324,136 @@ int main(int argc, char **argv) {
               size_t len = 0; /* for parsing filesize or # of words */
 
               /*t or f or 1st letter of error code */
-              offset += rread(trsfd, &trs_buffer[offset], 1);
+              ret = rread(trsfd, &trs_buffer[offset], 1);
+              if(ret == -1) continue;
+              offset += ret;
 
               switch(c = trs_buffer[offset - 1]) {
                 /* File translation */
                 case 'f': {
                   FILE *readfp;
-                  size_t filesize;
+                  size_t bytesread, filesize;
 
                   /* filename start */
-                  offset += rread(trsfd, &trs_buffer[offset], 2);
+                  ret = rread(trsfd, &trs_buffer[offset], 2);
+                  if(ret == -1) continue; /* EPIPE */
+                  offset += ret;
+
                   while(trs_buffer[offset - 1] != ' ') {
-                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ret = rread(trsfd, &trs_buffer[offset], 1);
+                    if(ret == -1) break; /* EPIPE */
+
+                    offset += ret;
                     ++len;
                   }
+                  if(ret == -1) continue; /* EPIPE */
 
                   /* The file's name */
                   strncpy(filename,  &trs_buffer[offset - len - 1], len);
-                  if((readfp = fopen(filename, "w")) == NULL) {
+                  if((readfp = fopen(filename, "wb")) == NULL) {
                     perror("fopen");
-                    exit(E_GENERIC);
+                    continue;
                   }
 
                   len = 0;
                   /* file size start */
-                  offset += rread(trsfd, &trs_buffer[offset], 1);
+                  ret = rread(trsfd, &trs_buffer[offset], 1);
+                  if(ret == -1) {
+                    fclose(readfp);
+                    unlink(filename);
+                    continue;
+                  } /* EPIPE */
+
+                  offset += ret;
                   while(trs_buffer[offset - 1] != ' ') {
-                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ret = rread(trsfd, &trs_buffer[offset], 1);
+                    if(ret == -1) break; /* EPIPE */
+
+                    offset += ret;
                     ++len;
                   }
+                  if(ret == -1) {
+                    fclose(readfp);
+                    unlink(filename);
+                    continue;
+                  } /* EPIPE */
 
                   /* The file's size */
+                  bytesread = 0;
                   filesize =
                     (size_t)strtoll(&trs_buffer[offset - len - 1], NULL, 10);
 
                   /* Read the file */
-                  while(filesize > 0) {
+                  while(filesize > bytesread) {
                     offset = rread(trsfd, trs_buffer,
-                      filesize > PCKT_SIZE_MAX ? PCKT_SIZE_MAX : filesize);
-                    filesize -= offset;
-                    while(offset > 0) {
-                      size_t nbytes = fwrite((void *)trs_buffer, sizeof(char),
-                        offset, readfp);
-                      offset -= nbytes;
+                      (filesize - bytesread) > PCKT_MAX_SIZE
+                      ? PCKT_MAX_SIZE : filesize - bytesread);
+                    if(offset == -1) break; /* EPIPE */
 
-                      if(ferror(readfp)) {
-                        perror("ferror");
-                        exit(E_GENERIC);
-                      }
+                    fwrite((void *)trs_buffer, 1, offset, readfp);
+                    if(ferror(readfp)) {
+                      perror("ferror");
+                      fclose(readfp);
+                      close(trsfd);
+                      unlink(filename);
+                      exit(E_GENERIC);
                     }
+
+                    bytesread += offset;
                   }
+                  if(offset == -1) {
+                    fclose(readfp);
+                    unlink(filename);
+                    continue;
+                  } /* EPIPE */
+                  fclose(readfp);
+                  printf("\n");
 
                   /* Terminator (cork) */
-                  rread(trsfd, trs_buffer, 1);
-                  if(readfp) fclose(readfp);
+                  ret = rread(trsfd, trs_buffer, 1);
+                  if(ret == -1) continue; /* EPIPE */
+
+                  printf("Translation successful: \'%s\' (%lu bytes)\n",
+                    filename, bytesread);
                   break;
                 }
                 /* Text translation */
                 case 't': {
                   int n;
 
-                  offset += rread(trsfd, &trs_buffer[offset], 2); /* ' #' */
+                  /* Read a space and the beginning of the number of words */
+                  ret = rread(trsfd, &trs_buffer[offset], 2); /* ' #' */
+                  if(ret == -1) continue; /* EPIPE */
+                  offset += ret;
+
+                  /* Read and count number of digits */
                   while(trs_buffer[offset - 1] != ' ') {
-                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ret = rread(trsfd, &trs_buffer[offset], 1);
+                    if(ret == -1) break; /* EPIPE */
+
+                    offset += ret;
                     ++len;
                   }
-                  n = atoi(&trs_buffer[offset - len - 1]); /* # of words */
+                  if(ret == -1) continue; /* EPIPE */
 
-                  strcpy(trs_buffer, "Translation Successful: ");
-                  offset = strlen(trs_buffer);
+                  /* # of words */
+                  n = atoi(&trs_buffer[offset - len - 1]);
 
+                  offset = 0;
                   while(n > 0) {
-                    offset += rread(trsfd, &trs_buffer[offset], 1);
+                    ret = rread(trsfd, &trs_buffer[offset], 1);
+                    if(ret == -1) break; /* EPIPE */
+
+                    offset += ret;
                     switch(trs_buffer[offset - 1]) {
                       case  ' ':
                       case '\n': --n;
                     }
                   }
+                  if(ret == -1) continue; /* EPIPE */
 
-                  printf("%s", trs_buffer);
+                  trs_buffer[offset] = '\0';
+                  printf("Translation successful: %s", trs_buffer);
                   break;
                 }
                 /* Error code */
@@ -423,6 +492,11 @@ int main(int argc, char **argv) {
           }
 
           close(trsfd);
+
+          if(signal(SIGPIPE, old_handler) == SIG_ERR) {
+            perror("Failed to restore SIGPIPE handler");
+            exit(E_GENERIC);
+          }
         }
         else {
           eprintf("Error: Unrecognized response from server discarded\n");
