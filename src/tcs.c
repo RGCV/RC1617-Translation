@@ -71,11 +71,11 @@ int main(int argc, char **argv) {
   trs_list = new_trs_list();
 
   while(shouldRun) {
-    char send_buffer[PCKT_SIZE_MAX]; /* Buffer used to send msgs */
-    char recv_buffer[PCKT_SIZE_MAX]; /* Buffer used to receive msgs */
+    char send_buffer[PMSG_MAX_LEN]; /* Buffer used to send msgs */
+    char recv_buffer[PMSG_MAX_LEN]; /* Buffer used to receive msgs */
 
     /* Wait for message */
-    if(recvfrom(sockfd, (void *)recv_buffer, PCKT_SIZE_MAX, 0,
+    if(recvfrom(sockfd, (void *)recv_buffer, PMSG_MAX_LEN, 0,
         (struct sockaddr *)&sockaddr, &addrlen) == -1) {
       perror("recvfrom");
       close(sockfd);

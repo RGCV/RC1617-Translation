@@ -8,18 +8,24 @@
  */
 
 /* Constants / Macros */
-/* Default ports */
-#define TCS_DEFAULT_PORT 58050
-#define TRS_DEFAULT_PORT 59000
-
-/* Max file name size */
-#define FILE_MAX_LEN 0xFF /* 255 */
-
 /* Language length */
 #define LANG_MAX_LEN 21
 
+/* Line length */
+#define LINE_MAX_LEN 0xFF /* 255 */
+
+/* File name max length */
+#define FILE_MAX_LEN 0xFF /* 255 */
+
+/* Protocol message length */
+#define PMSG_MAX_LEN 0x7F /* 127 */
+
 /* Packet size */
-#define PCKT_SIZE_MAX 0x7FF /* 2047 */
+#define PCKT_MAX_SIZE 0x7FF /* 2047 */
+
+/* Default ports */
+#define TCS_DEFAULT_PORT 58050
+#define TRS_DEFAULT_PORT 59000
 
 /* General protocol error code strings */
 #define QUERY_INVALID "EOF" /* Query failed, bad spelling, wasn't found, ... */
