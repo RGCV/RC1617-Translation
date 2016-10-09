@@ -84,20 +84,22 @@ int main(int argc, char **argv) {
     }
     else {
       char c = recv_buffer[0]; /* First char to infer query and sender */
-      struct hostent *client = gethostbyaddr((struct in_addr *)&sockaddr,
-        addrlen, AF_INET);
 
       /* Query from user */
       if(c == UTCS_LANG_QUERY[0] || c == UTCS_NAMESERV_QUERY[0]) {
-        printf("Received languages query from %s:%hu\n",
-          inet_ntoa(sockaddr.sin_addr), ntohs(sockaddr.sin_port));
-
         /* Languages query */
         if(!strncmp(recv_buffer, UTCS_LANG_QUERY"\n",
             sizeof(UTCS_LANG_QUERY))) {
           trs_entry_t *node = trs_list->head;
 
-          strtok(recv_buffer, delim); /* Query type not needed anymore */
+          /* Query type not needed anymore */
+          strtok(recv_buffer, delim);
+          strtok(NULL, delim);
+
+          printf("[%s] Received languages query from user @%s:%hu\n",
+            UTCS_LANG_QUERY, inet_ntoa(sockaddr.sin_addr),
+            ntohs(sockaddr.sin_port));
+
           strcpy(send_buffer, UTCS_LANG_RESPONSE);
 
           /* Check languages exist */
@@ -107,16 +109,19 @@ int main(int argc, char **argv) {
               sprintf(send_buffer, "%s %s", send_buffer, node->language);
               node = node->next;
             }
-
+            printf("[%s] Request Successful! List of languages sent!\n",
+              UTCS_LANG_RESPONSE);
           }
           /* If there's more garbage at the end, respond with syntax error */
           else if(strtok(NULL, delim) != NULL) {
-            eprintf("Protocol error: Query had a bad form\n");
+            eprintf("[%s] Protocol error: Query had a bad form\n",
+              QUERY_BADFORM);
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
           }
           /* Else, if all failed, respond with an invalidation (not found) */
           else {
-            eprintf("Protocol error: No response available\n");
+            eprintf("[%s] Protocol error: No response available\n",
+              QUERY_INVALID);
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
@@ -125,8 +130,14 @@ int main(int argc, char **argv) {
             sizeof(UTCS_NAMESERV_QUERY))) {
           trs_entry_t *node = NULL;
 
+          /* Query type not needed anymore */
+          strtok(recv_buffer, delim);
+
+          printf("[%s] Received translation server query from user @ %s:%hu\n",
+            UTCS_NAMESERV_QUERY, inet_ntoa(sockaddr.sin_addr),
+            ntohs(sockaddr.sin_port));
+
           strcpy(send_buffer, UTCS_NAMESERV_RESPONSE);
-          strtok(recv_buffer, delim); /* Query type not needed anymore */
 
           /* If the server was found */
           if((node = get_trs_entry_lang(trs_list, strtok(NULL, delim)))) {
@@ -137,19 +148,21 @@ int main(int argc, char **argv) {
             }
             /* Query had syntax errors */
             else {
-              eprintf("Protocol error: Query had a bad form\n");
+              eprintf("[%s] Protocol error: Query had a bad form\n",
+                QUERY_BADFORM);
               sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
             }
           }
           /* TRS for the queried language wasn't found */
           else {
-            eprintf("Protocol error: No response available\n");
+            eprintf("[%s] Protocol error: No response available\n",
+              QUERY_INVALID);
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
           }
         }
         /* Protocol message unrecognized */
         else {
-          eprintf("Protocol error: Unrecognized query\n");
+          eprintf("[%s] Protocol error: Unrecognized query\n", QUERY_BADFORM);
           strcpy(send_buffer, QUERY_BADFORM); /* ERR */
         }
       }
@@ -158,23 +171,27 @@ int main(int argc, char **argv) {
         char *address, *language;
         unsigned short port;
 
-        printf("Received TRS server registry query from %s:%hu\n",
-          client ? client->h_name : inet_ntoa(sockaddr.sin_addr),
-          ntohs(sockaddr.sin_port));
 
         /* TRS Registry */
         if(!strncmp(recv_buffer, SERV_TRSREG_QUERY,
             sizeof(SERV_TRSREG_QUERY) - 1)) {
+          printf("[%s] Received TRS server registry query from %s:%hu\n",
+            SERV_TRSREG_QUERY, inet_ntoa(sockaddr.sin_addr),
+            ntohs(sockaddr.sin_port));
+
           regEntry = true;
           strcpy(send_buffer, SERV_TRSREG_RESPONSE);
         }
         /* TRS Unregistry */
         else if(!strncmp(recv_buffer, SERV_TRSBYE_QUERY,
             sizeof(SERV_TRSBYE_QUERY) - 1)) {
+          printf("[%s] Received TRS server unregistry query from %s:%hu\n",
+            SERV_TRSBYE_QUERY, inet_ntoa(sockaddr.sin_addr),
+            ntohs(sockaddr.sin_port));
           strcpy(send_buffer, SERV_TRSBYE_RESPONSE);
         }
         else {
-          eprintf("Protocol error: Unrecognized query\n");
+          eprintf("[%s] Protocol error: Unrecognized query\n", QUERY_BADFORM);
           strcpy(send_buffer, QUERY_BADFORM);
         }
 
@@ -192,20 +209,26 @@ int main(int argc, char **argv) {
             ret = remove_trs_entry(trs_list, language, address, port);
           }
 
-          if(ret == 0)
+          if(ret == 0) {
+            printf("[%s] Request successful! Server %s!\n",
+              SERV_STATUS_OK, regEntry ? "registered" : "removed");
             sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
-          else
+          }
+          else {
+            printf("[%s] Request declined! Couldn\'t %s server!\n",
+              SERV_STATUS_NOK, regEntry ? "register" : "remove");
             sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
+          }
 
-          printf("Request %s!\n", ret ? "Declined" : "Successful");
         }
         else {
+          eprintf("[%s] Protocol error: Unrecognized query\n", QUERY_BADFORM);
           sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
         }
       }
       /* Protocol message had syntax errors */
       else {
-        eprintf("Protocol error: Query had a bad form\n");
+        eprintf("[%s] Protocol error: Query had a bad form\n", QUERY_BADFORM);
         sprintf(send_buffer, "%s", QUERY_BADFORM); /* ERR */
       }
 
