@@ -7,6 +7,9 @@
  * @author: Sara Azinhal (ist181700)
  */
 
+#ifndef _RCTR_H
+#define _RCTR_H
+
 /* Constants / Macros */
 /* Language length */
 #define LANG_MAX_LEN 21
@@ -81,4 +84,6 @@ ssize_t rread(int fd, char *buffer, ssize_t size); /* Persistant read */
 
 int udp_send_recv(int sockfd, void *buf, size_t len, size_t size,
   struct sockaddr *dest_addr, socklen_t *addrlen, unsigned long delay);
-/* Send len bytes in buf and receive at most size bytes in buf */
+  /* Send len bytes in buf and receive at most size bytes in buf */
+
+#endif /* _RCTR_H */
