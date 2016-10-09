@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rctr.h"
 #include "trs_list.h"
 
 
@@ -52,7 +53,7 @@ int add_trs_entry(trs_list_t *trs_list, const char *language,
 
 int remove_trs_entry(trs_list_t *trs_list, const char *language,
   const char *address, unsigned short port) {
-  trs_entry_t *node = trs_list->head, *temp = node;
+  trs_entry_t *node = trs_list->head, *temp = NULL;
 
   while(node &&
       (strncmp(node->language, language, LANG_MAX_LEN)
@@ -63,7 +64,7 @@ int remove_trs_entry(trs_list_t *trs_list, const char *language,
   }
   /* remove trs_entry if it exists */
   if(node) {
-    if(node != temp)
+    if(temp)
       temp->next = node->next;
     free(node->address);
     free(node);

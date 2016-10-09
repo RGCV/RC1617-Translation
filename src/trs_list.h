@@ -7,8 +7,6 @@
  * @author: Sara Azinhal (ist181700)
  */
 
-#define LANG_MAX_LEN 21
-
 typedef struct trs_entry {
   char language[LANG_MAX_LEN];
   char *address;
