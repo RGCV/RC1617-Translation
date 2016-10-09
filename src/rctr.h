@@ -10,6 +10,10 @@
 #ifndef _RCTR_H
 #define _RCTR_H
 
+/* Required headers for external definitions */
+#include <stdio.h>
+#include <sys/socket.h>
+
 /* Constants / Macros */
 /* Language length */
 #define LANG_MAX_LEN 21
