@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
           trs_entry_t *node = trs_list->head;
 
           strtok(recv_buffer, "\n"); /* Remove trailing \n (terminator) */
-          strtok(NULL, " "); /* Next strtok should return NULL, if correct */
+          strtok(recv_buffer, " "); /* Query type not needed anymore */
 
           printf("[%s] Received languages query from user [%s:%hu]\n",
             UTCS_LANG_QUERY, inet_ntoa(sockaddr.sin_addr),
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
           strcpy(send_buffer, UTCS_LANG_RESPONSE);
 
           /* No garbage at the end means query was well formed */
-          if(strtok(NULL, delim) == NULL) {
+          if(strtok(NULL, " ") == NULL) {
             /* Check languages exist */
             if(trs_list->size > 0) {
               sprintf(send_buffer, "%s %d", send_buffer, (int)trs_list->size);
@@ -117,8 +117,8 @@ int main(int argc, char **argv) {
             }
             /* Language not found */
             else {
-              eprintf("[%s] Protocol error: Language not found\n",
-                QUERY_INVALID);
+              eprintf("[%s] Protocol error: No languages found, no "
+                "TRS has registered yet\n", QUERY_INVALID);
               sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
             }
           }
@@ -134,9 +134,10 @@ int main(int argc, char **argv) {
             sizeof(UTCS_NAMESERV_QUERY))) {
           char *token; /* Help with tokenizing */
           trs_entry_t *node = NULL;
-          strtok(recv_buffer, "\n"); /* Removing trailing \n (terminator) */
 
+          strtok(recv_buffer, "\n"); /* Removing trailing \n (terminator) */
           strtok(recv_buffer, " "); /* Query type not needed anymore */
+
           token = strtok(NULL, " "); /* Language, supposedly */
 
           printf("[%s] Received translation server query from user [%s:%hu]\n",
@@ -148,6 +149,9 @@ int main(int argc, char **argv) {
           if(strtok(NULL, " ") == NULL && token) {
             /* If the server was found */
             if((node = get_trs_entry_lang(trs_list, token))) {
+              printf("[%s] Request successful: Sent TRS [%s:%hu] for language "
+                "\'%s\'\n", UTCS_NAMESERV_RESPONSE, node->address, node->port,
+                node->language);
               sprintf(send_buffer, "%s %s %hu", send_buffer,
                 node->address, node->port);
             }
@@ -171,6 +175,7 @@ int main(int argc, char **argv) {
           strcpy(send_buffer, QUERY_BADFORM); /* ERR */
         }
       }
+      /* Query from a TRS */
       else if(c == SERV_TRSREG_QUERY[0] || c == SERV_TRSBYE_QUERY[0]) {
         /* Bools for flagging registry vs. removal and query form */
         bool regEntry = false, badform = false;
@@ -181,7 +186,7 @@ int main(int argc, char **argv) {
         /* TRS Registry */
         if(!strncmp(recv_buffer, SERV_TRSREG_QUERY,
             sizeof(SERV_TRSREG_QUERY) - 1)) {
-          printf("[%s] Received TRS server registry query from %s:%hu\n",
+          printf("[%s] Received server registry query from TRS [%s:%hu]\n",
             SERV_TRSREG_QUERY, inet_ntoa(sockaddr.sin_addr),
             ntohs(sockaddr.sin_port));
 
@@ -191,13 +196,13 @@ int main(int argc, char **argv) {
         /* TRS Removal */
         else if(!strncmp(recv_buffer, SERV_TRSBYE_QUERY,
             sizeof(SERV_TRSBYE_QUERY) - 1)) {
-          printf("[%s] Received TRS server unregistry query from %s:%hu\n",
+          printf("[%s] Received server removal query from TRS [%s:%hu]\n",
             SERV_TRSBYE_QUERY, inet_ntoa(sockaddr.sin_addr),
             ntohs(sockaddr.sin_port));
 
           strcpy(send_buffer, SERV_TRSBYE_RESPONSE);
         }
-        /* Query had syntax errors */
+        /* Protocol message unrecognized */
         else {
           badform = true;
 
@@ -210,7 +215,7 @@ int main(int argc, char **argv) {
           char *token; /* For port checking, before conversion*/
 
           strtok(recv_buffer, "\n"); /* Remove trailing \n (terminator) */
-          strtok(NULL, " "); /* Query type not needed anymore */
+          strtok(recv_buffer, " "); /* Query type not needed anymore */
 
           language = strtok(NULL, " ");
           address = strtok(NULL, " ");
@@ -243,9 +248,10 @@ int main(int argc, char **argv) {
               sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
             }
           }
-          /* Protocol message unrecognized */
+          /* Query had syntax errors */
           else {
-            eprintf("[%s] Protocol error: Unrecognized query\n", QUERY_BADFORM);
+            eprintf("[%s] Protocol error: Query had a bad form\n",
+              QUERY_BADFORM);
             sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
           }
         }
