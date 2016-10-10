@@ -407,7 +407,6 @@ int main(int argc, char **argv) {
                     continue;
                   } /* EPIPE */
                   fclose(readfp);
-                  printf("\n");
 
                   /* Terminator (cork) */
                   ret = rread(trsfd, trs_buffer, 1);
