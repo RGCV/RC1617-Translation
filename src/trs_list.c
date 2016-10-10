@@ -7,10 +7,10 @@
  * @author: Sara Azinhal (ist181700)
  */
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "rctr.h"
 #include "trs_list.h"
 
 
@@ -26,15 +26,20 @@ trs_list_t *new_trs_list() {
 
 int add_trs_entry(trs_list_t *trs_list, const char *language,
     const char *address, unsigned short port) {
+  bool canAdd = true;
+  bool lang, addr, fport;
   trs_entry_t *node = trs_list->head;
 
-  while(node &&
-      (!strncmp(node->language, language, LANG_MAX_LEN)
-      || (!strcmp(node->address, address) && node->port == port))) {
+  while(node && canAdd) {
+    lang = !strncmp(node->language, language, LANG_MAX_LEN);
+    addr = !strcmp(node->address, address);
+    fport = node->port == port;
+
+    canAdd = !lang && (!addr || !fport);
     node = node->next;
   }
   /* trs_entry wasn't found, add it */
-  if(!node) {
+  if(canAdd) {
     node = (trs_entry_t *)malloc(sizeof(struct trs_entry));
     if(node) {
       strncpy(node->language, language, LANG_MAX_LEN);
@@ -55,8 +60,8 @@ int remove_trs_entry(trs_list_t *trs_list, const char *language,
   const char *address, unsigned short port) {
   trs_entry_t *node = trs_list->head, *temp = NULL;
 
-  while(node &&
-      (strncmp(node->language, language, LANG_MAX_LEN)
+  while(node
+      && (strncmp(node->language, language, LANG_MAX_LEN)
       || strcmp(node->address, address)
       || node->port != port)) {
     temp = node;
@@ -64,10 +69,14 @@ int remove_trs_entry(trs_list_t *trs_list, const char *language,
   }
   /* remove trs_entry if it exists */
   if(node) {
-    if(temp)
+    if(node == trs_list->head)
+      trs_list->head = node->next;
+    else
       temp->next = node->next;
+
     free(node->address);
     free(node);
+    node = NULL;
 
     trs_list->size--;
     return 0;
@@ -100,10 +109,14 @@ size_t destroy_trs_list(trs_list_t *trs_list) {
     trs_entry_t *temp = node;
 
     node = node->next;
-    free(temp->language);
+    free(temp->address);
     free(temp);
+
+    temp = NULL;
   }
 
   free(trs_list);
+  trs_list = NULL;
+
   return size;
 }
