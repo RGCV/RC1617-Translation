@@ -7,6 +7,8 @@
  * @author: Sara Azinhal (ist181700)
  */
 
+#include "rctr.h"
+
 typedef struct trs_entry {
   char language[LANG_MAX_LEN];
   char *address;
