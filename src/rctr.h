@@ -42,21 +42,21 @@
 #define REQ_ERROR "ERR" /* Protocol syntax error */
 
 /* User-TCS Protocol (in UDP) */
-#define UTCS_LANG_REQ    "ULQ" /* 'list' request */
+#define UTCS_LANG_REQ "ULQ" /* 'list' request */
 #define UTCS_LANG_RSP "ULR" /* 'list' response */
 
-#define UTCS_NAMESERV_REQ    "UNQ" /* 'request' request */
+#define UTCS_NAMESERV_REQ "UNQ" /* 'request' request */
 #define UTCS_NAMESERV_RSP "UNR" /* 'request' response */
 
 /* User-TRS Protocol (in TCP) */
-#define UTRS_TRANSLATE_REQ    "TRQ" /* after 'request' to TCS */
-#define UTRS_TRANSLATE_RSP "TRR" /* TRS response with translation */
+#define UTRS_TRANSLATE_REQ      "TRQ" /* after 'request' to TCS */
+#define UTRS_TRANSLATE_RSP      "TRR" /* TRS response with translation */
 #define UTRS_TRANSLATE_NOTAVAIL "NTA" /* Requested translation not available */
 
 /* TRS-TCS Protocol (in UDP) */
-#define SERV_TRSREG_REQ    "SRG" /* TRS registry request to TCS */
+#define SERV_TRSREG_REQ "SRG" /* TRS registry request to TCS */
 #define SERV_TRSREG_RSP "SRR" /* TCS response to registry from TRS */
-#define SERV_TRSBYE_REQ    "SUN" /* TRS unregistry request to TCS */
+#define SERV_TRSBYE_REQ "SUN" /* TRS unregistry request to TCS */
 #define SERV_TRSBYE_RSP "SUR" /* TCS response to unregistry from TRS */
 
 #define SERV_STATUS_OK  "OK" /* Registry/Deregistry successful */
