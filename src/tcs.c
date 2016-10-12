@@ -33,7 +33,6 @@ unsigned short TCSport; /* Port to bind TCS to */
 int main(int argc, char **argv) {
   int ret; /* readArgv return code */
   int sockfd; /* TCS UDP socket fd */
-  bool shouldRun = true; /* should the loop be running flag */
   struct sockaddr_in sockaddr; /* sockaddr */
   socklen_t addrlen; /* Length of sockaddr */
 
@@ -56,7 +55,7 @@ int main(int argc, char **argv) {
 
   memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
   sockaddr.sin_family = AF_INET;
-  inet_aton("0.0.0.0", (struct in_addr *)&sockaddr.sin_addr.s_addr);
+  sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
   sockaddr.sin_port = htons(TCSport);
   addrlen = sizeof(sockaddr);
 
@@ -70,7 +69,7 @@ int main(int argc, char **argv) {
   /* Init trs_list */
   trs_list = new_trs_list();
 
-  while(shouldRun) {
+  while(true) {
     char send_buffer[PMSG_MAX_LEN]; /* Buffer used to send msgs */
     char recv_buffer[PMSG_MAX_LEN]; /* Buffer used to receive msgs */
 
@@ -83,25 +82,24 @@ int main(int argc, char **argv) {
       exit(E_GENERIC);
     }
     else {
-      char c = recv_buffer[0]; /* First char to infer query and sender */
+      char c = recv_buffer[0]; /* First char to infer request and sender */
 
-      /* Query from user */
-      if(c == UTCS_LANG_QUERY[0] || c == UTCS_NAMESERV_QUERY[0]) {
-        /* Languages query */
-        if(!strncmp(recv_buffer, UTCS_LANG_QUERY"\n",
-            sizeof(UTCS_LANG_QUERY))) {
+      /* Request from user */
+      if(c == UTCS_LANG_REQ[0] || c == UTCS_NAMESERV_REQ[0]) {
+        /* Languages request */
+        if(!strncmp(recv_buffer, UTCS_LANG_REQ"\n", sizeof(UTCS_LANG_REQ))) {
           trs_entry_t *node = trs_list->head;
 
           strtok(recv_buffer, "\n"); /* Remove trailing \n (terminator) */
-          strtok(recv_buffer, " "); /* Query type not needed anymore */
+          strtok(recv_buffer, " "); /* Request type not needed anymore */
 
-          printf("[%s] Received languages query from user [%s:%hu]\n",
-            UTCS_LANG_QUERY, inet_ntoa(sockaddr.sin_addr),
+          printf("[%s] Received languages request from user [%s:%hu]\n",
+            UTCS_LANG_REQ, inet_ntoa(sockaddr.sin_addr),
             ntohs(sockaddr.sin_port));
 
-          strcpy(send_buffer, UTCS_LANG_RESPONSE);
+          strcpy(send_buffer, UTCS_LANG_RSP);
 
-          /* No garbage at the end means query was well formed */
+          /* No garbage at the end means request was well formed */
           if(strtok(NULL, " ") == NULL) {
             /* Check languages exist */
             if(trs_list->size > 0) {
@@ -113,44 +111,44 @@ int main(int argc, char **argv) {
               }
 
               printf("[%s] Request Successful! List of languages sent!\n",
-                UTCS_LANG_RESPONSE);
+                UTCS_LANG_RSP);
             }
             /* Language not found */
             else {
               eprintf("[%s] Protocol error: No languages found, no "
-                "TRS has registered yet\n", QUERY_INVALID);
-              sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
+                "TRS has registered yet\n", REQ_NAVAIL);
+              sprintf(send_buffer, "%s %s", send_buffer, REQ_NAVAIL);
             }
           }
-          /* Query had syntax errors*/
+          /* Request had syntax errors*/
           else {
-            eprintf("[%s] Protocol error: Query had a bad form\n",
-              QUERY_BADFORM);
-            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+            eprintf("[%s] Protocol error: Request had syntax errors\n",
+              REQ_ERROR);
+            sprintf(send_buffer, "%s %s", send_buffer, REQ_ERROR);
           }
         }
-        /* TRS query */
-        else if(!strncmp(recv_buffer, UTCS_NAMESERV_QUERY" ",
-            sizeof(UTCS_NAMESERV_QUERY))) {
+        /* TRS request */
+        else if(!strncmp(recv_buffer, UTCS_NAMESERV_REQ" ",
+            sizeof(UTCS_NAMESERV_REQ))) {
           char *token; /* Help with tokenizing */
           trs_entry_t *node = NULL;
 
           strtok(recv_buffer, "\n"); /* Removing trailing \n (terminator) */
-          strtok(recv_buffer, " "); /* Query type not needed anymore */
+          strtok(recv_buffer, " "); /* Request type not needed anymore */
 
           token = strtok(NULL, " "); /* Language, supposedly */
 
-          printf("[%s] Received translation server query from user [%s:%hu]\n",
-            UTCS_NAMESERV_QUERY, inet_ntoa(sockaddr.sin_addr),
+          printf("[%s] Received translation server request from user [%s:%hu]\n",
+            UTCS_NAMESERV_REQ, inet_ntoa(sockaddr.sin_addr),
             ntohs(sockaddr.sin_port));
 
-          strcpy(send_buffer, UTCS_NAMESERV_RESPONSE);
+          strcpy(send_buffer, UTCS_NAMESERV_RSP);
           /* And there's nothing else to read (msg has good form) */
           if(strtok(NULL, " ") == NULL && token) {
             /* If the server was found */
             if((node = get_trs_entry_lang(trs_list, token))) {
               printf("[%s] Request successful: Sent TRS [%s:%hu] for language "
-                "\'%s\'\n", UTCS_NAMESERV_RESPONSE, node->address, node->port,
+                "\'%s\'\n", UTCS_NAMESERV_RSP, node->address, node->port,
                 node->language);
               sprintf(send_buffer, "%s %s %hu", send_buffer,
                 node->address, node->port);
@@ -158,64 +156,64 @@ int main(int argc, char **argv) {
             /* TRS for the queried language wasn't found */
             else {
               eprintf("[%s] Protocol error: No TRS for language \'%s\' found\n",
-                QUERY_INVALID, token);
-              sprintf(send_buffer, "%s %s", send_buffer, QUERY_INVALID);
+                REQ_NAVAIL, token);
+              sprintf(send_buffer, "%s %s", send_buffer, REQ_NAVAIL);
             }
           }
-          /* Query had syntax errors */
+          /* Request had syntax errors */
           else {
-              eprintf("[%s] Protocol error: Query had a bad form\n",
-                QUERY_BADFORM);
-              sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+              eprintf("[%s] Protocol error: Request had syntax errors\n",
+                REQ_ERROR);
+              sprintf(send_buffer, "%s %s", send_buffer, REQ_ERROR);
             }
         }
         /* Protocol message unrecognized */
         else {
-          eprintf("[%s] Protocol error: Unrecognized query\n", QUERY_BADFORM);
-          strcpy(send_buffer, QUERY_BADFORM); /* ERR */
+          eprintf("[%s] Protocol error: Unrecognized request\n", REQ_ERROR);
+          strcpy(send_buffer, REQ_ERROR); /* ERR */
         }
       }
-      /* Query from a TRS */
-      else if(c == SERV_TRSREG_QUERY[0] || c == SERV_TRSBYE_QUERY[0]) {
-        /* Bools for flagging registry vs. removal and query form */
+      /* Request from a TRS */
+      else if(c == SERV_TRSREG_REQ[0] || c == SERV_TRSBYE_REQ[0]) {
+        /* Bools for flagging registry vs. removal and request form */
         bool regEntry = false, badform = false;
         /* For holding the info of the TRS to be registered or removed */
         char *address, *language;
         unsigned short port;
 
         /* TRS Registry */
-        if(!strncmp(recv_buffer, SERV_TRSREG_QUERY,
-            sizeof(SERV_TRSREG_QUERY) - 1)) {
-          printf("[%s] Received server registry query from TRS [%s:%hu]\n",
-            SERV_TRSREG_QUERY, inet_ntoa(sockaddr.sin_addr),
+        if(!strncmp(recv_buffer, SERV_TRSREG_REQ,
+            sizeof(SERV_TRSREG_REQ) - 1)) {
+          printf("[%s] Received server registry request from TRS [%s:%hu]\n",
+            SERV_TRSREG_REQ, inet_ntoa(sockaddr.sin_addr),
             ntohs(sockaddr.sin_port));
 
           regEntry = true;
-          strcpy(send_buffer, SERV_TRSREG_RESPONSE);
+          strcpy(send_buffer, SERV_TRSREG_RSP);
         }
         /* TRS Removal */
-        else if(!strncmp(recv_buffer, SERV_TRSBYE_QUERY,
-            sizeof(SERV_TRSBYE_QUERY) - 1)) {
-          printf("[%s] Received server removal query from TRS [%s:%hu]\n",
-            SERV_TRSBYE_QUERY, inet_ntoa(sockaddr.sin_addr),
+        else if(!strncmp(recv_buffer, SERV_TRSBYE_REQ,
+            sizeof(SERV_TRSBYE_REQ) - 1)) {
+          printf("[%s] Received server removal request from TRS [%s:%hu]\n",
+            SERV_TRSBYE_REQ, inet_ntoa(sockaddr.sin_addr),
             ntohs(sockaddr.sin_port));
 
-          strcpy(send_buffer, SERV_TRSBYE_RESPONSE);
+          strcpy(send_buffer, SERV_TRSBYE_RSP);
         }
         /* Protocol message unrecognized */
         else {
           badform = true;
 
-          eprintf("[%s] Protocol error: Unrecognized query\n", QUERY_BADFORM);
-          strcpy(send_buffer, QUERY_BADFORM);
+          eprintf("[%s] Protocol error: Unrecognized request\n", REQ_ERROR);
+          strcpy(send_buffer, REQ_ERROR);
         }
 
-        /* Query type accepted */
+        /* Request type accepted */
         if(!badform) {
           char *token; /* For port checking, before conversion*/
 
           strtok(recv_buffer, "\n"); /* Remove trailing \n (terminator) */
-          strtok(recv_buffer, " "); /* Query type not needed anymore */
+          strtok(recv_buffer, " "); /* Request type not needed anymore */
 
           language = strtok(NULL, " ");
           address = strtok(NULL, " ");
@@ -224,7 +222,10 @@ int main(int argc, char **argv) {
           /* Check if the arguments are there */
           if(language && address && token
               && (port = (unsigned short)atoi(token)) > 0) {
-            int ret;
+            int ret; /* Addition/removal of trs_entry return value */
+
+            printf("[%s] Language served: %s; Server: %s:%hu\n", recv_buffer,
+              language, address, port);
 
             /* Registry vs. Removal */
             if(regEntry) {
@@ -236,30 +237,30 @@ int main(int argc, char **argv) {
 
             /* OK vs. NOK */
             if(ret == 0) {
-              printf("[%s] Request successful! Server %s!\n",
-                SERV_STATUS_OK, regEntry ? "registered" : "removed");
+              printf("[%s] Request successful! Server %s\n", recv_buffer,
+                regEntry ? "registered" : "removed");
 
               sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
             }
             else {
-              printf("[%s] Request declined! Couldn\'t %s server!\n",
-                SERV_STATUS_NOK, regEntry ? "register" : "remove");
+              eprintf("[%s] Request declined! Couldn\'t %s server\n",
+                recv_buffer, regEntry ? "register" : "remove");
 
               sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
             }
           }
-          /* Query had syntax errors */
+          /* Request had syntax errors */
           else {
-            eprintf("[%s] Protocol error: Query had a bad form\n",
-              QUERY_BADFORM);
-            sprintf(send_buffer, "%s %s", send_buffer, QUERY_BADFORM);
+            eprintf("[%s] Protocol error: Request had syntax errors\n",
+              REQ_ERROR);
+            sprintf(send_buffer, "%s %s", send_buffer, REQ_ERROR);
           }
         }
       }
       /* Protocol message had syntax errors */
       else {
-        eprintf("[%s] Protocol error: Query had a bad form\n", QUERY_BADFORM);
-        sprintf(send_buffer, "%s", QUERY_BADFORM); /* ERR */
+        eprintf("[%s] Protocol error: Request had syntax errors\n", REQ_ERROR);
+        sprintf(send_buffer, "%s", REQ_ERROR); /* ERR */
       }
 
       strcat(send_buffer, "\n"); /* Terminator (cork) */
@@ -291,8 +292,8 @@ void printHelp(FILE *stream, const char *prog) {
   fprintf(stream,
     "Options:\n"
     "\t-h   Shows this help message and exits\n"
-    "\t-p   The TCS\' port, in the range 0-65535 (default: TCSport = %hu)\n",
-  TCS_DEFAULT_PORT);
+    "\t-p   The TCS\' port, in the range %hu-65535 (default: %hu)\n",
+  PORT_MIN, TCS_DEFAULT_PORT);
 }
 
 void printUsage(FILE *stream, const char *prog) {
@@ -323,7 +324,7 @@ int readArgv(int argc, char **argv) {
             perror("strtol");
             err = E_GENERIC;
           } /* Overflow or an invalid value */
-          else if(val < 0 || val > USHRT_MAX || endptr == optarg
+          else if(val < PORT_MIN || val > USHRT_MAX || endptr == optarg
               || *endptr != '\0') {
             fprintf(stderr, "Invalid port: %s\n", optarg);
             err = E_INVALIDPORT;
