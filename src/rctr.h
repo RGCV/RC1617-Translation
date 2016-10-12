@@ -15,63 +15,65 @@
 #include <sys/socket.h>
 
 /* Constants / Macros */
+/* File name max length */
+#define FILE_MAX_LEN 0xFF /* 255 */
+
 /* Language length */
 #define LANG_MAX_LEN 21
 
 /* Line length */
 #define LINE_MAX_LEN 0x1FF /* 512 */
 
-/* File name max length */
-#define FILE_MAX_LEN 0xFF /* 255 */
-
-/* Protocol message length */
-#define PMSG_MAX_LEN 0x7F /* 127 */
+/* Minimum port value */
+#define PORT_MIN 1024
 
 /* Packet size */
 #define PCKT_MAX_SIZE 0x7FF /* 2047 */
+
+/* Protocol message length */
+#define PMSG_MAX_LEN 0x7F /* 127 */
 
 /* Default ports */
 #define TCS_DEFAULT_PORT 58050
 #define TRS_DEFAULT_PORT 59000
 
 /* General protocol error code strings */
-#define QUERY_INVALID "EOF" /* Query failed, bad spelling, wasn't found, ... */
-#define QUERY_BADFORM "ERR" /* Protocol syntax error */
+#define REQ_NAVAIL "EOF" /* Request failed, bad spelling, wasn't found, ... */
+#define REQ_ERROR "ERR" /* Protocol syntax error */
 
 /* User-TCS Protocol (in UDP) */
-#define UTCS_LANG_QUERY    "ULQ" /* 'list' query */
-#define UTCS_LANG_RESPONSE "ULR" /* 'list' response */
+#define UTCS_LANG_REQ    "ULQ" /* 'list' request */
+#define UTCS_LANG_RSP "ULR" /* 'list' response */
 
-#define UTCS_NAMESERV_QUERY    "UNQ" /* 'request' query */
-#define UTCS_NAMESERV_RESPONSE "UNR" /* 'request' response */
+#define UTCS_NAMESERV_REQ    "UNQ" /* 'request' request */
+#define UTCS_NAMESERV_RSP "UNR" /* 'request' response */
 
 /* User-TRS Protocol (in TCP) */
-#define UTRS_TRANSLATE_QUERY    "TRQ" /* after 'request' to TCS */
-#define UTRS_TRANSLATE_RESPONSE "TRR" /* TRS response with translation */
+#define UTRS_TRANSLATE_REQ    "TRQ" /* after 'request' to TCS */
+#define UTRS_TRANSLATE_RSP "TRR" /* TRS response with translation */
 #define UTRS_TRANSLATE_NOTAVAIL "NTA" /* Requested translation not available */
 
 /* TRS-TCS Protocol (in UDP) */
-#define SERV_TRSREG_QUERY    "SRG" /* TRS registry query to TCS */
-#define SERV_TRSREG_RESPONSE "SRR" /* TCS response to registry from TRS */
-#define SERV_TRSBYE_QUERY    "SUN" /* TRS unregistry query to TCS */
-#define SERV_TRSBYE_RESPONSE "SUR" /* TCS response to unregistry from TRS */
+#define SERV_TRSREG_REQ    "SRG" /* TRS registry request to TCS */
+#define SERV_TRSREG_RSP "SRR" /* TCS response to registry from TRS */
+#define SERV_TRSBYE_REQ    "SUN" /* TRS unregistry request to TCS */
+#define SERV_TRSBYE_RSP "SUR" /* TCS response to unregistry from TRS */
 
 #define SERV_STATUS_OK  "OK" /* Registry/Deregistry successful */
 #define SERV_STATUS_NOK "NOK" /* Registry/Deregistry failed */
 
 /* Error macros */
 /* Functional errors */
-#define E_GENERIC     0xFF /* Short-sized signed -1, unsigned 255 */
+#define E_GENERIC     0xFF /* 255: generic error (-1 signed short) */
 
 /* GetOpt errors */
-#define E_INVALIDPORT 0x10 /* Port given as arg was invalid */
-#define E_MISSINGARG  0x11 /* Missing argument for option that required one */
-#define E_UNKNOWNOPT  0x12 /* Option unrecognized */
-#define E_DUPOPT      0x13 /* Duplicate option */
+#define E_INVALIDPORT 0x10 /* 16: Port given as arg was invalid */
+#define E_MISSINGARG  0x11 /* 17: Missing argument for opt that required one */
+#define E_UNKNOWNOPT  0x12 /* 18: Option unrecognized */
+#define E_DUPOPT      0x13 /* 19: Duplicate option */
 
 /* Protocol errors */
-#define E_PROTINVALID  0x20 /* Valid response not found, wasn't available, .. */
-#define E_PROTQBADFORM 0x21 /* Protocol message's syntax was wrong */
+#define E_PROTREQERROR 0x20 /* 32: Protocol message's syntax was wrong */
 
 /* Prototypes */
 void printHelp(FILE *stream, const char *prog); /* Prints prog help */
@@ -82,12 +84,13 @@ int readArgv(int argc, char **argv); /* Reads and processes args */
 
 int eprintf(const char *format, ...); /* Print to stderr */
 
-ssize_t rwrite(int fd, char *buffer, ssize_t size); /* Persistant write */
+ssize_t rwrite(int fd, const void *buffer, size_t size); /* Persistent write */
 
-ssize_t rread(int fd, char *buffer, ssize_t size); /* Persistant read */
+ssize_t rread(int fd, void *buffer, size_t size); /* Persistent read */
 
-int udp_send_recv(int sockfd, void *buf, size_t len, size_t size,
-  struct sockaddr *dest_addr, socklen_t *addrlen, unsigned long delay);
-  /* Send len bytes in buf and receive at most size bytes in buf */
+int udp_send_recv(int sockfd, void *sendbuf, size_t sendlen, size_t sendsize,
+  void *recvbuf, size_t recvsize, struct sockaddr *dest_addr,
+  socklen_t *addrlen, unsigned long timeout);
+/* Send len bytes in buf and receive at most size bytes in buf */
 
 #endif /* _RCTR_H */
