@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
   }
   close(sockfd); /* Reopen UDP later, used for TCP hereon out until signaled */
 
-  /* Unrecognized response from TCS */
+  /* Parse response from TCS */
   if(!strncmp(recv_buffer, SERV_TRSREG_RSP" ", sizeof(SERV_TRSREG_RSP))) {
     char *token = strtok(recv_buffer, "\n"); /* Remove trailling \n */
     strtok(recv_buffer, " "); /* Response no longer needed */
@@ -279,9 +279,13 @@ int main(int argc, char **argv) {
 
         if(!strncmp(recv_buffer, UTRS_TRANSLATE_REQ" ",
             sizeof(UTRS_TRANSLATE_REQ))) {
-          char filename[FILE_MAX_LEN];
-          int nwords;
-          size_t len = 0;
+          char filename[FILE_MAX_LEN]; /* File to translate's file name\ */
+          char line_buffer[LINE_MAX_LEN]; /* Line from translation file */
+          char *aux_token; /* Auxiliary tokenizing var */
+          size_t len = 0; /* Var to help calculate length of numbers or words */
+
+          /* Start building response */
+          strcpy(send_buffer, UTRS_TRANSLATE_RSP);
 
           /* Read another char, t or f or an error code */
           if(rread(userfd, &recv_buffer[offset], 1) == -1) continue;
@@ -293,6 +297,8 @@ int main(int argc, char **argv) {
             case 'f': {
               FILE *readfp;
               size_t bytesread, filesize;
+
+              sprintf(send_buffer, "%s %c", send_buffer, 'f');
 
               /* filename start */
               if(rread(userfd, &recv_buffer[offset], 2) == -1) continue;
@@ -378,6 +384,8 @@ int main(int argc, char **argv) {
             case 't': {
               int n;
 
+              sprintf(send_buffer, "%s %c", send_buffer, 't');
+
               isText = true;
               /* Read a space and the beginning of the number of words */
               if(rread(userfd, &recv_buffer[offset], 2) == -1) continue;
@@ -393,7 +401,8 @@ int main(int argc, char **argv) {
               if(ret == -1) continue; /* EPIPE */
 
               /* # of words */
-              nwords = n = atoi(&recv_buffer[offset - len - 1]);
+              n = atoi(&recv_buffer[offset - len - 1]);
+              sprintf(send_buffer, "%s %d", send_buffer, n);
 
               offset = 0;
               while(n > 0) {
@@ -407,23 +416,71 @@ int main(int argc, char **argv) {
               }
               if(ret == -1) continue; /* EPIPE */
 
-              recv_buffer[offset > PCKT_MAX_SIZE
-                ? offset : PCKT_MAX_SIZE] = '\0';
+              recv_buffer[offset > PCKT_MAX_SIZE - 1
+                ? PCKT_MAX_SIZE - 1 : offset] = '\0';
               break;
             }
             /* Error code */
             default:
+              sprintf(send_buffer, "%s %s\n", send_buffer, REQ_ERROR);
               eprintf("[%s] Protocol error: Request had syntax errors\n");
-              rread(userfd, recv_buffer, sizeof(REQ_ERROR) - 1);
-              exit(E_GENERIC);
+              rread(userfd, recv_buffer, sizeof(REQ_ERROR) - 1); /* Read rest */
+              rwrite(userfd, send_buffer, strlen(send_buffer)); /* Send rsp */
+          }
+
+          if(isText) {
+            strtok(recv_buffer, "\n"); /* Remove trailing \n */
+
+            /* Word to translate */
+            token = strtok_r(recv_buffer, " ", &aux_token);
+            /* While there are words to translate */
+            while(token) {
+              char *word; /* Word in file */
+              bool nta = false; /* No translation available flag */
+
+              /* Read lines from the translation file */
+              while(fgets(line_buffer, sizeof(line_buffer) / sizeof(char),
+                  textfp) != NULL) {
+                /* Reached EOF, NTA */
+                if(feof(textfp)) {
+                  nta = true;
+                  eprintf("[TRS] No translation found for \'%s\'\n", token);
+                  break;
+                }
+
+                word = strtok(line_buffer, " "); /* First word */
+                if(!strcmp(token, word)) {
+                  sprintf(send_buffer, "%s %s", send_buffer,
+                    strtok(NULL, "\n"));
+                  break;
+                }
+              }
+              /* If nta, don't bother tokenizing the rest  */
+              if(nta) break;
+
+              fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
+              token = strtok_r(aux_token, " ", &aux_token); /* Next word */
+            }
+            /* Should be null. If not, no translation was found for token */
+            if(token) {
+              /* Build NTA message to send to user */
+              sprintf(send_buffer, UTRS_TRANSLATE_RSP" "REQ_NAVAIL);
+            }
+            
+            strcat(send_buffer, "\n"); /* Terminator (cork) */
+            /* Send of translation (or error, if NTA) */
+            rwrite(userfd, send_buffer, strlen(send_buffer));
+          }
+          else {
+
           }
         }
+        /* Unrecognized request */
         else {
           eprintf("[%s] Protocol error: Unrecognized request\n");
+          rwrite(userfd, REQ_ERROR"\n", sizeof(REQ_ERROR) / sizeof(char));
           continue;
         }
-
-        /* TODO: Translate and send a response */
       }
 
       close(userfd);
