@@ -5,6 +5,7 @@ deploy: user tcs trs
 	mv bin/user proj_50/user/
 	mv bin/trs proj_50/trs/
 	mv bin/tcs proj_50/
+	rm -rf bin
 	cp src/trs\ resources/* proj_50/trs/
 	cp src/user\ resources/* proj_50/user/
 
