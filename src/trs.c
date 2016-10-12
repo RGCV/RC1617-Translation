@@ -9,6 +9,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <libgen.h>
 #include <limits.h>
 #include <netdb.h>
 #include <signal.h>
@@ -17,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "rctr.h" /* common header */
@@ -279,9 +281,9 @@ int main(int argc, char **argv) {
 
         if(!strncmp(recv_buffer, UTRS_TRANSLATE_REQ" ",
             sizeof(UTRS_TRANSLATE_REQ))) {
-          char filename[FILE_MAX_LEN]; /* File to translate's file name\ */
+          bool reqError = false; /* Request had syntax errors */
+          char filename[FILE_MAX_LEN]; /* File to translate's file name */
           char line_buffer[LINE_MAX_LEN]; /* Line from translation file */
-          char *aux_token; /* Auxiliary tokenizing var */
           size_t len = 0; /* Var to help calculate length of numbers or words */
 
           /* Start building response */
@@ -367,7 +369,7 @@ int main(int argc, char **argv) {
               }
               if(offset == -1 || bytesread < filesize) {
                 if(readfp) fclose(readfp);
-                eprintf("Failed to read the entire file. "
+                eprintf("[TRS] Failed to read the entire file. "
                   "Received %zd/%zd bytes, deleting artifact\n",
                   bytesread, filesize);
 
@@ -426,53 +428,134 @@ int main(int argc, char **argv) {
               eprintf("[%s] Protocol error: Request had syntax errors\n");
               rread(userfd, recv_buffer, sizeof(REQ_ERROR) - 1); /* Read rest */
               rwrite(userfd, send_buffer, strlen(send_buffer)); /* Send rsp */
+              reqError = true;
           }
 
-          if(isText) {
-            strtok(recv_buffer, "\n"); /* Remove trailing \n */
+          if(!reqError) {
+            /* Parse the rest of the data and send a response */
+            if(isText) {
+              char *aux_token; /* Auxiliary tokenizing var */
+              strtok(recv_buffer, "\n"); /* Remove trailing \n */
 
-            /* Word to translate */
-            token = strtok_r(recv_buffer, " ", &aux_token);
-            /* While there are words to translate */
-            while(token) {
-              char *word; /* Word in file */
-              bool nta = false; /* No translation available flag */
+              /* Word to translate */
+              token = strtok_r(recv_buffer, " ", &aux_token);
+              /* While there are words to translate */
+              while(token && fgets(line_buffer,
+                  sizeof(line_buffer) / sizeof(char), textfp) != NULL) {
+                char *word  = strtok(line_buffer, " "); /* Word in file */
 
-              /* Read lines from the translation file */
-              while(fgets(line_buffer, sizeof(line_buffer) / sizeof(char),
-                  textfp) != NULL) {
-                /* Reached EOF, NTA */
-                if(feof(textfp)) {
-                  nta = true;
-                  eprintf("[TRS] No translation found for \'%s\'\n", token);
-                  break;
-                }
-
-                word = strtok(line_buffer, " "); /* First word */
                 if(!strcmp(token, word)) {
-                  sprintf(send_buffer, "%s %s", send_buffer,
-                    strtok(NULL, "\n"));
+                  word = strtok(NULL, "\n");
+                  printf("[TRS] Translation for word \'%s\' found: %s\n",
+                    token, word);
+
+                  /* Append word to message */
+                  sprintf(send_buffer, "%s %s", send_buffer, word);
+
+                  fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
+                  token = strtok_r(aux_token, " ", &aux_token); /* Next */
+                }
+              }
+
+              /* Reached EOF, no translation available */
+              if(feof(textfp)) {
+                fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
+                eprintf("[%s] No translation found for word \'%s\'\n",
+                  UTRS_TRANSLATE_NAVAIL, token);
+
+                /* Build NTA message to send to user */
+                sprintf(send_buffer,
+                  UTRS_TRANSLATE_RSP" "UTRS_TRANSLATE_NAVAIL);
+              }
+              /* Successfully translated every word */
+              else {
+                printf("[%s] Text translation successful\n", UTRS_TRANSLATE_RSP);
+              }
+
+              strcat(send_buffer, "\n"); /* Terminator (cork) */
+              /* Send of translation (or error, if NTA) */
+              rwrite(userfd, send_buffer, strlen(send_buffer));
+            }
+            else {
+              FILE *sendfp; /* File pointer to file to send */
+              size_t filesize, bytessent = 0; /* Number of bytes sent */
+
+              while(fgets(line_buffer, sizeof(line_buffer) / sizeof(char),
+                  filesfp) != NULL) {
+                char *file = strtok(line_buffer, " "); /* File's name in file */
+                if(file && !strcmp(filename, file)) {
+                  struct stat fst; /* To get file's size */
+
+                  file = strtok(NULL, "\n"); /* Translated file name */
+                  printf("[TRS] Found matching file for \'%s\': %s\n", filename,
+                    file);
+                  sprintf(send_buffer, "%s %s", send_buffer, basename(file));
+
+                  /* Test if can open file */
+                  if((sendfp = fopen(file, "rb")) == NULL) {
+                    perror("fopen");
+                  }
+                  /* Stat file for file's size */
+                  else if(stat(file, &fst) == -1) {
+                    perror("stat");
+                  }
+                  /* Send file */
+                  else {
+                    size_t tosend = fst.st_size;
+                    filesize = tosend;
+
+                    sprintf(send_buffer, "%s %zd ", send_buffer, filesize);
+                    if(rwrite(userfd, send_buffer, strlen(send_buffer)) == -1)
+                      break;
+
+                    while(tosend > 0) {
+                      /* Determine how much to read and send thereafter */
+                      size_t sendlen = (tosend >
+                        sizeof(send_buffer) / sizeof(char)
+                        ? sizeof(send_buffer) / sizeof(char) : tosend);
+                      size_t nbytes = fread((void *)send_buffer, 1, sendlen,
+                        sendfp);
+
+                      if(ferror(sendfp)) {
+                        perror("fread");
+                        break;
+                      }
+
+                      if(rwrite(userfd, send_buffer, sendlen) == -1) break;
+                      tosend -= nbytes;
+                      bytessent += nbytes;
+                    }
+                  }
+
+                  rwrite(userfd, "\n", 1);
                   break;
                 }
               }
-              /* If nta, don't bother tokenizing the rest  */
-              if(nta) break;
 
-              fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
-              token = strtok_r(aux_token, " ", &aux_token); /* Next word */
-            }
-            /* Should be null. If not, no translation was found for token */
-            if(token) {
-              /* Build NTA message to send to user */
-              sprintf(send_buffer, UTRS_TRANSLATE_RSP" "REQ_NAVAIL);
-            }
-            
-            strcat(send_buffer, "\n"); /* Terminator (cork) */
-            /* Send of translation (or error, if NTA) */
-            rwrite(userfd, send_buffer, strlen(send_buffer));
-          }
-          else {
+              /* Close file */
+              if(sendfp) fclose(sendfp);
 
+              /* Reached EOF, no translation available */
+              if(feof(filesfp)) {
+                eprintf("[%s] No translation found for file \'%s\'\n",
+                UTRS_TRANSLATE_NAVAIL, token);
+
+                /* Build NTA message to send to user */
+                sprintf(send_buffer,
+                  UTRS_TRANSLATE_RSP" "UTRS_TRANSLATE_NAVAIL"\n");
+                rwrite(userfd, send_buffer, strlen(send_buffer));
+              }
+              /* Couldn't send the entire file */
+              else if(bytessent < filesize) {
+                eprintf("[TRS] Error sending file: Sent %zd/%zd bytes\n",
+                  bytessent, filesize);
+              }
+              /* Successfully translated the entire fail */
+              else {
+                printf("[%s] File \'%s \'sent successfully: Sent %zd bytes\n",
+                  UTRS_TRANSLATE_RSP, filename, bytessent);
+              }
+            }
           }
         }
         /* Unrecognized request */
@@ -483,6 +566,7 @@ int main(int argc, char **argv) {
         }
       }
 
+      /* Close TCP user socket */
       close(userfd);
     }
   }
