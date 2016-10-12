@@ -51,7 +51,7 @@
 /* User-TRS Protocol (in TCP) */
 #define UTRS_TRANSLATE_REQ      "TRQ" /* after 'request' to TCS */
 #define UTRS_TRANSLATE_RSP      "TRR" /* TRS response with translation */
-#define UTRS_TRANSLATE_NOTAVAIL "NTA" /* Requested translation not available */
+#define UTRS_TRANSLATE_NAVAIL "NTA" /* Requested translation not available */
 
 /* TRS-TCS Protocol (in UDP) */
 #define SERV_TRSREG_REQ "SRG" /* TRS registry request to TCS */
