@@ -29,15 +29,15 @@ int eprintf(const char *format, ...) {
   return ret;
 }
 
-ssize_t rwrite(int fd, char *buffer, ssize_t size) {
+ssize_t rwrite(int fd, const void *buffer, size_t size) {
   ssize_t offset = 0;
 
   while(size > 0) {
     ssize_t nbytes = 0;
 
-    if((nbytes = write(fd, &buffer[offset], size)) == -1) {
+    if((nbytes = write(fd, buffer + offset, size)) == -1) {
       if(errno == EPIPE) {
-        eprintf("Broken pipe: Connection closed\n");
+        eprintf("Broken pipe: Connection closed by peer\n");
         return -1;
       }
       else {
@@ -54,15 +54,15 @@ ssize_t rwrite(int fd, char *buffer, ssize_t size) {
   return offset;
 }
 
-ssize_t rread(int fd, char *buffer, ssize_t size) {
+ssize_t rread(int fd, void *buffer, size_t size) {
   ssize_t offset = 0;
 
   while(size > 0) {
     ssize_t nbytes = 0;
 
-    if((nbytes = read(fd, &buffer[offset], size)) == -1) {
+    if((nbytes = read(fd, buffer + offset, size)) == -1) {
       if(errno == EPIPE) {
-        eprintf("Broken pipe: Connection closed\n");
+        eprintf("Broken pipe: Connection closed by peer\n");
         return -1;
       }
       else {
@@ -79,19 +79,23 @@ ssize_t rread(int fd, char *buffer, ssize_t size) {
   return offset;
 }
 
-int udp_send_recv(int sockfd, void *buf, size_t len, size_t size,
-    struct sockaddr *dest_addr, socklen_t *addrlen, unsigned long delay) {
+int udp_send_recv(int sockfd, void *sendbuf, size_t sendlen, size_t sendsize,
+    void *recvbuf, size_t recvsize, struct sockaddr *dest_addr,
+    socklen_t *addrlen, unsigned long timeout) {
   int err = EXIT_SUCCESS;
 
-  if(sendto(sockfd, buf, len, 0, dest_addr, *addrlen) == -1) {
-    err = errno;
+  if(recvbuf == NULL) recvbuf = sendbuf;
+  if(recvsize <= 0) recvsize = sendsize;
+
+  if(sendto(sockfd, sendbuf, sendlen, 0, dest_addr, *addrlen) == -1) {
     perror("sendto");
+    err = -1;
   }
 
-  if(delay > 0) {
+  if(timeout > 0) {
     struct timeval tv;
 
-    tv.tv_sec = delay;
+    tv.tv_sec = timeout;
     tv.tv_usec = 0;
     if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (void *)&tv,
         (socklen_t)sizeof(struct timeval)) == -1) {
@@ -100,9 +104,9 @@ int udp_send_recv(int sockfd, void *buf, size_t len, size_t size,
     }
   }
 
-  if(!err && recvfrom(sockfd, buf, size, 0, dest_addr, addrlen) == -1) {
-    err = errno;
+  if(!err && recvfrom(sockfd, recvbuf, recvsize, 0, dest_addr, addrlen) == -1) {
     perror("recvfrom");
+    err = -1;
   }
 
   return err;
