@@ -471,10 +471,10 @@ int main(int argc, char **argv) {
                   }
                   /* Error code */
                   default:
-                    if(c == UTRS_TRANSLATE_NOTAVAIL[0]) {
+                    if(c == UTRS_TRANSLATE_NAVAIL[0]) {
                       eprintf("No translation available\n");
                       rread(trsfd, trs_buffer,
-                        sizeof(UTRS_TRANSLATE_NOTAVAIL) - 1);
+                        sizeof(UTRS_TRANSLATE_NAVAIL) - 1);
                     }
                     else if(c == REQ_ERROR[0]) {
                       eprintf("Protocol error: Request had syntax errors\n");
@@ -485,9 +485,9 @@ int main(int argc, char **argv) {
                 }
               }
               else {
-              eprintf("Protocol error: Unrecognized response\n");
-              exit(E_GENERIC);
-            }
+                eprintf("Protocol error: Unrecognized response\n");
+                exit(E_GENERIC);
+              }
             }
           }
           /* Connection to trs server failed */
