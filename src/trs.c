@@ -35,6 +35,7 @@
 volatile bool interrupted = false; /* flag to determine if SIGINT was issued */
 
 struct hostent *TCSname; /* TCS hostent struct */
+struct hostent *TRShost; /* TRS hostent struct */
 unsigned short TRSport, TCSport; /* TRS and TCS ports */
 char TRSlanguage[LANG_MAX_LEN]; /* The language TRS provides translation for */
 char TRSname[PMSG_MAX_LEN]; /* The TRS's hostname */
@@ -58,6 +59,7 @@ int main(int argc, char **argv) {
   FILE *filesfp, *textfp; /* translation files streams */
 
   struct sockaddr_in sockaddr; /* sockaddr */
+  struct in_addr *addr; /* addr */
   socklen_t addrlen; /* Length of sockaddr */
 
   /* Setup defaults */
@@ -102,6 +104,11 @@ int main(int argc, char **argv) {
     exit(E_GENERIC);
   }
 
+  if((TRShost = gethostbyname(TRSname)) == NULL) {
+    perror("gethostbyname");
+    exit(E_GENERIC);
+  }
+
   /* Create UDP socket for TCS communication */
   if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
     perror("udp socket");
@@ -116,9 +123,10 @@ int main(int argc, char **argv) {
   addrlen = sizeof(sockaddr);
 
   /* Build message to register TRS */
+  addr = (struct in_addr *)TRShost->h_addr_list[0];
   strcpy(send_buffer, SERV_TRSREG_REQ" ");
-  sprintf(send_buffer, "%s %s %s %hu\n", send_buffer, TRSlanguage, TRSname,
-    TRSport);
+  sprintf(send_buffer, "%s %s %s %hu\n", send_buffer, TRSlanguage,
+    inet_ntoa(*addr), TRSport);
 
   printf("[%s] Sending registry request to TCS [%s:%hu]\n", SERV_TRSREG_REQ,
     TCSname->h_name, TCSport);
@@ -195,8 +203,8 @@ int main(int argc, char **argv) {
 
       /* Build message to unregister from TCS */
       strcpy(send_buffer, SERV_TRSBYE_REQ" ");
-      sprintf(send_buffer, "%s %s %s %hu\n", send_buffer, TRSlanguage, TRSname,
-        TRSport);
+      sprintf(send_buffer, "%s %s %s %hu\n", send_buffer, TRSlanguage,
+        inet_ntoa(*addr), TRSport);
 
       /* Close listening socket fd */
       close(sockfd);
@@ -254,7 +262,8 @@ int main(int argc, char **argv) {
       ssize_t offset = 0; /* Bytes read offset */
       struct timeval timeout;
 
-      printf("[TRS] Accepted TCP connection from user [%s:%hu]\n",
+      printf("[%s] Accepted TCP connection from user [%s:%hu]\n",
+        UTRS_TRANSLATE_REQ,
         inet_ntoa((struct in_addr)sockaddr.sin_addr),
         ntohs(sockaddr.sin_port));
 
@@ -321,6 +330,7 @@ int main(int argc, char **argv) {
                 perror("fopen");
                 continue;
               }
+              filename[len > FILE_MAX_LEN - 1 ? FILE_MAX_LEN - 1 : len] = '\0'; 
 
               len = 0;
               /* file size start */
@@ -369,9 +379,9 @@ int main(int argc, char **argv) {
               }
               if(offset == -1 || bytesread < filesize) {
                 if(readfp) fclose(readfp);
-                eprintf("[TRS] Failed to read the entire file. "
+                eprintf("[%s] Failed to read the entire file. "
                   "Received %zd/%zd bytes, deleting artifact\n",
-                  bytesread, filesize);
+                  REQ_ERROR, bytesread, filesize);
 
                 unlink(filename);
                 continue;
@@ -380,6 +390,10 @@ int main(int argc, char **argv) {
 
               /* Terminator (cork) */
               if(rread(userfd, recv_buffer, 1) == -1) continue;
+
+              printf("[%s] Received file translation request: \'%s\' "
+                "(%zd bytes)\n", 
+                UTRS_TRANSLATE_REQ, filename, filesize);
               break;
             }
             /* Read the words the user sent */
@@ -420,6 +434,9 @@ int main(int argc, char **argv) {
 
               recv_buffer[offset > PCKT_MAX_SIZE - 1
                 ? PCKT_MAX_SIZE - 1 : offset] = '\0';
+
+              printf("[%s] Received text translation request\n",
+                UTRS_TRANSLATE_REQ);
               break;
             }
             /* Error code */
@@ -446,8 +463,8 @@ int main(int argc, char **argv) {
 
                 if(!strcmp(token, word)) {
                   word = strtok(NULL, "\n");
-                  printf("[TRS] Translation for word \'%s\' found: %s\n",
-                    token, word);
+                  printf("[%s] Translation for word \'%s\' found: %s\n",
+                    UTRS_TRANSLATE_REQ, token, word);
 
                   /* Append word to message */
                   sprintf(send_buffer, "%s %s", send_buffer, word);
@@ -478,17 +495,18 @@ int main(int argc, char **argv) {
             }
             else {
               FILE *sendfp; /* File pointer to file to send */
+              char *file; /* Pointer to translated file name */
               size_t filesize, bytessent = 0; /* Number of bytes sent */
 
               while(fgets(line_buffer, sizeof(line_buffer) / sizeof(char),
                   filesfp) != NULL) {
-                char *file = strtok(line_buffer, " "); /* File's name in file */
+                file = strtok(line_buffer, " "); /* File's name in file */
                 if(file && !strcmp(filename, file)) {
                   struct stat fst; /* To get file's size */
 
                   file = strtok(NULL, "\n"); /* Translated file name */
-                  printf("[TRS] Found matching file for \'%s\': %s\n", filename,
-                    file);
+                  printf("[%s] Found matching file for \'%s\': "
+                    "%s\n", UTRS_TRANSLATE_REQ, filename, file);
                   sprintf(send_buffer, "%s %s", send_buffer, basename(file));
 
                   /* Test if can open file */
@@ -503,6 +521,7 @@ int main(int argc, char **argv) {
                   else {
                     size_t tosend = fst.st_size;
                     filesize = tosend;
+                    
 
                     sprintf(send_buffer, "%s %zd ", send_buffer, filesize);
                     if(rwrite(userfd, send_buffer, strlen(send_buffer)) == -1)
@@ -538,7 +557,7 @@ int main(int argc, char **argv) {
               /* Reached EOF, no translation available */
               if(feof(filesfp)) {
                 eprintf("[%s] No translation found for file \'%s\'\n",
-                UTRS_TRANSLATE_NAVAIL, token);
+                  UTRS_TRANSLATE_NAVAIL, filename);
 
                 /* Build NTA message to send to user */
                 sprintf(send_buffer,
@@ -552,8 +571,8 @@ int main(int argc, char **argv) {
               }
               /* Successfully translated the entire fail */
               else {
-                printf("[%s] File \'%s \'sent successfully: Sent %zd bytes\n",
-                  UTRS_TRANSLATE_RSP, filename, bytessent);
+                printf("[%s] File \'%s\' sent successfully: Sent %zd bytes\n",
+                  UTRS_TRANSLATE_RSP, file, bytessent);
               }
             }
           }
