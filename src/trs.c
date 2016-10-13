@@ -50,7 +50,7 @@ void handle_signal(int signo); /* Signal handling function*/
 /* TRS main function */
 int main(int argc, char **argv) {
   int ret; /* readArgv's return value */
-  int sockfd; /* TCS UDP & TCP listening socket fd */
+  int servfd, tcsfd; /* TCS UDP & TCP listening socket fd */
   char send_buffer[PCKT_MAX_SIZE]; /* Buffer used to send msgs */
   char recv_buffer[PCKT_MAX_SIZE]; /* Buffer used to receive msgs */
   struct sigaction act; /* Register SIGINT handler */
@@ -108,9 +108,32 @@ int main(int argc, char **argv) {
     perror("gethostbyname");
     exit(E_GENERIC);
   }
+  /* Create TCP socket for user communication */
+  if((servfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    perror("tcp socket");
+    exit(E_GENERIC);
+  }
+
+  memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
+  sockaddr.sin_family = AF_INET;
+  sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  sockaddr.sin_port = htons(TRSport);
+  addrlen = sizeof(sockaddr);
+
+  /* Bind the TCP socket to the TRSport */
+  if(bind(servfd, (struct sockaddr *)&sockaddr, addrlen) == -1) {
+    perror("bind");
+    exit(E_GENERIC);
+  }
+
+  /* Listen on servfd, with a queue of size 4 */
+  if(listen(servfd, 4) == -1) {
+    perror("listen");
+    exit(E_GENERIC);
+  }
 
   /* Create UDP socket for TCS communication */
-  if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+  if((tcsfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
     perror("udp socket");
     exit(E_GENERIC);
   }
@@ -132,13 +155,13 @@ int main(int argc, char **argv) {
     TCShost->h_name, TCSport);
 
   /* Send and receive the response */
-  if(udp_send_recv(sockfd, send_buffer, strlen(send_buffer),
+  if(udp_send_recv(tcsfd, send_buffer, strlen(send_buffer),
       sizeof(send_buffer) / sizeof(char), recv_buffer,
       sizeof(recv_buffer) / sizeof(char), (struct sockaddr *)&sockaddr,
       &addrlen, 5) == -1) {
     exit(E_GENERIC);
   }
-  close(sockfd); /* Reopen UDP later, used for TCP hereon out until signaled */
+  close(tcsfd); /* Reopen UDP later, used for TCP hereon out until signaled */
 
   /* Parse response from TCS */
   if(!strncmp(recv_buffer, SERV_TRSREG_RSP" ", sizeof(SERV_TRSREG_RSP))) {
@@ -168,29 +191,6 @@ int main(int argc, char **argv) {
     exit(E_PROTREQERROR);
   }
 
-  /* Create TCP socket for user communication */
-  if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-    perror("tcp socket");
-    exit(E_GENERIC);
-  }
-
-  memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
-  sockaddr.sin_family = AF_INET;
-  sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  sockaddr.sin_port = htons(TRSport);
-  addrlen = sizeof(sockaddr);
-
-  /* Bind the TCP socket to the TRSport */
-  if(bind(sockfd, (struct sockaddr *)&sockaddr, addrlen) == -1) {
-    perror("bind");
-    exit(E_GENERIC);
-  }
-
-  /* Listen on sockfd, with a queue of size 4 */
-  if(listen(sockfd, 4) == -1) {
-    perror("listen");
-    exit(E_GENERIC);
-  }
 
   /* TRS main loop */
   while(true) {
@@ -206,11 +206,11 @@ int main(int argc, char **argv) {
       sprintf(send_buffer, "%s %s %s %hu\n", send_buffer, TRSlanguage,
         inet_ntoa(*addr), TRSport);
 
-      /* Close listening socket fd */
-      close(sockfd);
+      /* Close tcp listening socket fd */
+      close(servfd);
 
       /* Create socket for communication */
-      if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+      if((tcsfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("udp socket");
         exit(E_GENERIC);
       }
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
       addrlen = sizeof(sockaddr);
 
       /* If the communication failed (5 second delay) */
-      if(udp_send_recv(sockfd, send_buffer, strlen(send_buffer),
+      if(udp_send_recv(tcsfd, send_buffer, strlen(send_buffer),
           sizeof(send_buffer) / sizeof(char), recv_buffer,
           sizeof(recv_buffer) / sizeof(char), (struct sockaddr *)&sockaddr,
           &addrlen, 5) == -1) {
@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
       }
 
       /* Close UDP TCS socket */
-      close(sockfd);
+      close(tcsfd);
 
       /* Close TCP User socket (could be open) */
       close(userfd);
@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
       }
       break;
     }
-    else if((userfd = accept(sockfd, (struct sockaddr *)&sockaddr,
+    else if((userfd = accept(servfd, (struct sockaddr *)&sockaddr,
         &addrlen)) != -1) {
       ssize_t ret; /* Return value from rwrite/rread */
       ssize_t offset = 0; /* Bytes read offset */
