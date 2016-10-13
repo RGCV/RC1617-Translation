@@ -278,7 +278,7 @@ int main(int argc, char **argv) {
               perror("setsockopt(recv timeout)");
             }
             else {
-              ssize_t ret; /* Return from rwrite or rread */
+              ssize_t ret = 0; /* Return from rwrite or rread */
               ssize_t offset = 0; /* Bytes read offset */
 
               /* Send initial message (full, if text translation) */
@@ -361,6 +361,8 @@ int main(int argc, char **argv) {
 
                     /* The file's name */
                     strncpy(filename,  &trs_buffer[offset - len - 1], len);
+                    filename[len > FILE_MAX_LEN - 1
+                      ? FILE_MAX_LEN - 1 : len] = '\0';
                     if((readfp = fopen(filename, "wb")) == NULL) {
                       perror("fopen");
                       continue;
