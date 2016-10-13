@@ -1,6 +1,6 @@
 /**
  * RC Translation - RC@IST/UL
- * User client - RC45179 16'17
+ * TRS list implementation - RC45179 16'17
  *
  * @author: Rui Ventura (ist181045)
  * @author: Diogo Freitas (ist181586)
