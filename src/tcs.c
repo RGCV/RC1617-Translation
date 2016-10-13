@@ -237,14 +237,16 @@ int main(int argc, char **argv) {
 
             /* OK vs. NOK */
             if(ret == 0) {
-              printf("[%s] Request successful! Server %s\n", recv_buffer,
+              printf("[%s] Request successful! Server %s\n",
+                regEntry ? SERV_TRSREG_RSP : SERV_TRSBYE_RSP,
                 regEntry ? "registered" : "removed");
 
               sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_OK);
             }
             else {
               eprintf("[%s] Request declined! Couldn\'t %s server\n",
-                recv_buffer, regEntry ? "register" : "remove");
+                regEntry ? SERV_TRSREG_RSP : SERV_TRSBYE_RSP,
+                regEntry ? "register" : "remove");
 
               sprintf(send_buffer, "%s %s", send_buffer, SERV_STATUS_NOK);
             }
