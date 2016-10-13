@@ -1,3 +1,10 @@
+# RC Translation - RC@IST/UL
+# User client - RC45179 16'17
+#
+# @author: Rui Ventura (ist181045)
+# @author: Diogo Freitas (ist181586)
+# @author: Sara Azinhal (ist181700)
+
 all: user tcs trs
 	mkdir -p proj_50/user
 	mkdir -p proj_50/trs
