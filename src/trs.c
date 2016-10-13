@@ -330,7 +330,7 @@ int main(int argc, char **argv) {
                 perror("fopen");
                 continue;
               }
-              filename[len > FILE_MAX_LEN - 1 ? FILE_MAX_LEN - 1 : len] = '\0'; 
+              filename[len > FILE_MAX_LEN - 1 ? FILE_MAX_LEN - 1 : len] = '\0';
 
               len = 0;
               /* file size start */
@@ -392,7 +392,7 @@ int main(int argc, char **argv) {
               if(rread(userfd, recv_buffer, 1) == -1) continue;
 
               printf("[%s] Received file translation request: \'%s\' "
-                "(%zd bytes)\n", 
+                "(%zd bytes)\n",
                 UTRS_TRANSLATE_REQ, filename, filesize);
               break;
             }
@@ -461,7 +461,7 @@ int main(int argc, char **argv) {
                   sizeof(line_buffer) / sizeof(char), textfp) != NULL) {
                 char *word  = strtok(line_buffer, " "); /* Word in file */
 
-                if(!strcmp(token, word)) {
+                if(word && !strcmp(token, word)) {
                   word = strtok(NULL, "\n");
                   printf("[%s] Translation for word \'%s\' found: %s\n",
                     UTRS_TRANSLATE_REQ, token, word);
@@ -521,7 +521,7 @@ int main(int argc, char **argv) {
                   else {
                     size_t tosend = fst.st_size;
                     filesize = tosend;
-                    
+
 
                     sprintf(send_buffer, "%s %zd ", send_buffer, filesize);
                     if(rwrite(userfd, send_buffer, strlen(send_buffer)) == -1)
