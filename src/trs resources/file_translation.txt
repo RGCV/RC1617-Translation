@@ -1,2 +1,5 @@
-Tux.png pingu.jpg
+tux.png pingu.jpg
+tux_reaper.png reaper.jpg
+tux_mage.png mage.jpg
+
 
