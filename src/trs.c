@@ -34,7 +34,7 @@
 /* Global variables */
 volatile bool interrupted = false; /* flag to determine if SIGINT was issued */
 
-struct hostent *TCSname; /* TCS hostent struct */
+struct hostent *TCShost; /* TCS hostent struct */
 struct hostent *TRShost; /* TRS hostent struct */
 unsigned short TRSport, TCSport; /* TRS and TCS ports */
 char TRSlanguage[LANG_MAX_LEN]; /* The language TRS provides translation for */
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
   socklen_t addrlen; /* Length of sockaddr */
 
   /* Setup defaults */
-  TCSname = gethostbyname("localhost");
+  TCShost = gethostbyname("localhost");
   TCSport = TCS_DEFAULT_PORT;
   TRSport = TRS_DEFAULT_PORT;
 
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
   memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
   sockaddr.sin_family = AF_INET;
   sockaddr.sin_addr.s_addr =
-    ((struct in_addr *)TCSname->h_addr_list[0])->s_addr;
+    ((struct in_addr *)TCShost->h_addr_list[0])->s_addr;
   sockaddr.sin_port = htons(TCSport);
   addrlen = sizeof(sockaddr);
 
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
     inet_ntoa(*addr), TRSport);
 
   printf("[%s] Sending registry request to TCS [%s:%hu]\n", SERV_TRSREG_REQ,
-    TCSname->h_name, TCSport);
+    TCShost->h_name, TCSport);
 
   /* Send and receive the response */
   if(udp_send_recv(sockfd, send_buffer, strlen(send_buffer),
@@ -218,7 +218,7 @@ int main(int argc, char **argv) {
       memset((void *)&sockaddr, (int)'\0', sizeof(struct sockaddr_in));
       sockaddr.sin_family = AF_INET;
       sockaddr.sin_addr.s_addr =
-        ((struct in_addr *)TCSname->h_addr_list[0])->s_addr;
+        ((struct in_addr *)TCShost->h_addr_list[0])->s_addr;
       sockaddr.sin_port = htons(TCSport);
       addrlen = sizeof(sockaddr);
 
@@ -233,6 +233,9 @@ int main(int argc, char **argv) {
 
       /* Close UDP TCS socket */
       close(sockfd);
+
+      /* Close TCP User socket (could be open) */
+      close(userfd);
 
       /* Parse the response and print it */
       if(!strncmp(recv_buffer, SERV_TRSBYE_RSP" ", sizeof(SERV_TRSBYE_RSP))) {
@@ -306,7 +309,7 @@ int main(int argc, char **argv) {
           switch(recv_buffer[offset - 1]) {
             /* Read the file sent from the user */
             case 'f': {
-              FILE *readfp;
+              FILE *readfp = NULL;
               size_t bytesread, filesize;
 
               sprintf(send_buffer, "%s %c", send_buffer, 'f');
@@ -326,11 +329,11 @@ int main(int argc, char **argv) {
 
               /* The file's name */
               strncpy(filename,  &recv_buffer[offset - len - 1], len);
+              filename[len > FILE_MAX_LEN - 1 ? FILE_MAX_LEN - 1 : len] = '\0';
               if((readfp = fopen(filename, "wb")) == NULL) {
                 perror("fopen");
                 continue;
               }
-              filename[len > FILE_MAX_LEN - 1 ? FILE_MAX_LEN - 1 : len] = '\0';
 
               len = 0;
               /* file size start */
@@ -473,10 +476,10 @@ int main(int argc, char **argv) {
                   token = strtok_r(aux_token, " ", &aux_token); /* Next */
                 }
               }
+              fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
 
               /* Reached EOF, no translation available */
               if(feof(textfp)) {
-                fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
                 eprintf("[%s] No translation found for word \'%s\'\n",
                   UTRS_TRANSLATE_NAVAIL, token);
 
@@ -494,27 +497,28 @@ int main(int argc, char **argv) {
               rwrite(userfd, send_buffer, strlen(send_buffer));
             }
             else {
-              FILE *sendfp; /* File pointer to file to send */
+              FILE *sendfp = NULL; /* File pointer to file to send */
               char *file; /* Pointer to translated file name */
               size_t filesize, bytessent = 0; /* Number of bytes sent */
 
               while(fgets(line_buffer, sizeof(line_buffer) / sizeof(char),
                   filesfp) != NULL) {
+                char *translation; /* Pointer to translation of 'file' */
+
                 file = strtok(line_buffer, " "); /* File's name in file */
-                if(file && !strcmp(filename, file)) {
+                translation = strtok(NULL, "\n");
+                if(file && translation && !strcmp(filename, file)) {
                   struct stat fst; /* To get file's size */
 
-                  file = strtok(NULL, "\n"); /* Translated file name */
                   printf("[%s] Found matching file for \'%s\': "
-                    "%s\n", UTRS_TRANSLATE_REQ, filename, file);
-                  sprintf(send_buffer, "%s %s", send_buffer, basename(file));
+                    "%s\n", UTRS_TRANSLATE_REQ, filename, translation);
 
                   /* Test if can open file */
-                  if((sendfp = fopen(file, "rb")) == NULL) {
+                  if((sendfp = fopen(translation, "rb")) == NULL) {
                     perror("fopen");
                   }
                   /* Stat file for file's size */
-                  else if(stat(file, &fst) == -1) {
+                  else if(stat(translation, &fst) == -1) {
                     perror("stat");
                   }
                   /* Send file */
@@ -522,27 +526,31 @@ int main(int argc, char **argv) {
                     size_t tosend = fst.st_size;
                     filesize = tosend;
 
+                    if(filesize > 0) {
+                      sprintf(send_buffer, "%s %s", send_buffer,
+                        basename(file));
 
-                    sprintf(send_buffer, "%s %zd ", send_buffer, filesize);
-                    if(rwrite(userfd, send_buffer, strlen(send_buffer)) == -1)
+                      sprintf(send_buffer, "%s %zd ", send_buffer, filesize);
+                      if(rwrite(userfd, send_buffer, strlen(send_buffer)) == -1)
                       break;
 
-                    while(tosend > 0) {
-                      /* Determine how much to read and send thereafter */
-                      size_t sendlen = (tosend >
-                        sizeof(send_buffer) / sizeof(char)
-                        ? sizeof(send_buffer) / sizeof(char) : tosend);
-                      size_t nbytes = fread((void *)send_buffer, 1, sendlen,
-                        sendfp);
+                      while(tosend > 0) {
+                        /* Determine how much to read and send thereafter */
+                        size_t sendlen = (tosend >
+                          sizeof(send_buffer) / sizeof(char)
+                          ? sizeof(send_buffer) / sizeof(char) : tosend);
+                        size_t nbytes = fread((void *)send_buffer, 1, sendlen,
+                          sendfp);
 
-                      if(ferror(sendfp)) {
-                        perror("fread");
-                        break;
+                        if(ferror(sendfp)) {
+                          perror("fread");
+                          break;
+                        }
+
+                        if(rwrite(userfd, send_buffer, sendlen) == -1) break;
+                        tosend -= nbytes;
+                        bytessent += nbytes;
                       }
-
-                      if(rwrite(userfd, send_buffer, sendlen) == -1) break;
-                      tosend -= nbytes;
-                      bytessent += nbytes;
                     }
                   }
 
@@ -554,6 +562,8 @@ int main(int argc, char **argv) {
               /* Close file */
               if(sendfp) fclose(sendfp);
 
+              fseek(filesfp, 0L, SEEK_SET); /* Reset cursor to start */
+
               /* Reached EOF, no translation available */
               if(feof(filesfp)) {
                 eprintf("[%s] No translation found for file \'%s\'\n",
@@ -564,16 +574,16 @@ int main(int argc, char **argv) {
                   UTRS_TRANSLATE_RSP" "UTRS_TRANSLATE_NAVAIL"\n");
                 rwrite(userfd, send_buffer, strlen(send_buffer));
               }
-              /* Couldn't send the entire file */
+              /* Successfully translated the entire fail */
               else if(bytessent < filesize) {
                 eprintf("[TRS] Error sending file: Sent %zd/%zd bytes\n",
                   bytessent, filesize);
               }
-              /* Successfully translated the entire fail */
               else {
                 printf("[%s] File \'%s\' sent successfully: Sent %zd bytes\n",
                   UTRS_TRANSLATE_RSP, file, bytessent);
               }
+              /* Couldn't send the entire file */
             }
           }
         }
@@ -615,7 +625,7 @@ void printHelp(FILE *stream, const char *prog) {
 
     "\nOptions:\n"
     "\t-h   Shows this help message and exits\n"
-    "\t-n   The TCS\' hostname, where TCSname is an IPv4 address\n"
+    "\t-n   The TCS\' hostname, where TCShost is an IPv4 address\n"
     "\t     or a name (default: localhost)\n"
     "\t-p   The TRS\' port, in the range %1$hu-65535 "
     "(default: TRSport = %2$hu)\n"
@@ -625,7 +635,7 @@ void printHelp(FILE *stream, const char *prog) {
 }
 
 void printUsage(FILE *stream, const char *prog) {
-  fprintf(stream, "Usage: %s <language> [-p TRSport] [-n TCSname] "
+  fprintf(stream, "Usage: %s <language> [-p TRSport] [-n TCShost] "
     "[-e TCSport]\n", prog);
 }
 
@@ -634,7 +644,7 @@ int readArgv(int argc, char **argv) {
   int i, err = EXIT_SUCCESS;
   bool TRSlangflg = false,
     TRSportflg = false,
-    TCSnameflg = false,
+    TCShostflg = false,
     TCSportflg = false;
 
   /* Handle options */
@@ -644,15 +654,15 @@ int readArgv(int argc, char **argv) {
         printHelp(stdout, argv[0]);
         exit(EXIT_SUCCESS);
       case 'n': /* TCS hostname */
-        if(!TCSnameflg) {
-          if((TCSname = gethostbyname(optarg)) == NULL) {
+        if(!TCShostflg) {
+          if((TCShost = gethostbyname(optarg)) == NULL) {
             herror("gethostbyname");
             err = E_GENERIC;
           }
-          else TCSnameflg = true;
+          else TCShostflg = true;
         }
         else {
-          eprintf("Host already assigned: %s\n", TCSname->h_name[0]);
+          eprintf("Host already assigned: %s\n", TCShost->h_name[0]);
           err = E_DUPOPT;
         }
         break;
