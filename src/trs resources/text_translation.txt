@@ -6,5 +6,5 @@ bleistift lápis
 brille óculos
 hinzufügen adicionar
 abkürzung abreviatura
-mann homen
+mann homem
 geburtstag aniversário
