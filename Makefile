@@ -1,6 +1,4 @@
 all: user tcs trs
-
-deploy: user tcs trs
 	mkdir -p proj_50/user
 	mkdir -p proj_50/trs
 	mv bin/user proj_50/user/
