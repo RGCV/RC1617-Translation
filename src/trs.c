@@ -1,6 +1,6 @@
 /**
  * RC Translation - RC@IST/UL
- * Common header - RC45179 15'16
+ * Common header - RC45179 16'17
  *
  * @author: Rui Ventura (ist181045)
  * @author: Diogo Freitas (ist181586)
