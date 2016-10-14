@@ -2,3 +2,4 @@ bin
 proj_*
 *.out
 *.o
+*.zip
