@@ -1,0 +1,184 @@
+
+                               IST/UL 2016 - 2017
+
+                A (rather exhaustive) guideline to compile and run
+                      the RC Translate network applications
+
+                          by LEIC-A's RC45179 group #50
+
+                                ----------------
+
+DISCLAIMER:  This file also includes  and extensive guide on how to use the user
+application. Everything is, as mentioned, rather exchaustively detailed, meaning
+some information in this file might be unnecessary.
+
+
+### COMPILATION ###############################################################
+
+After unzipping the `proj_50.zip' archive, open a terminal and execute
+
+  `make all'
+
+or just
+
+  `make'
+
+in the directory  with  `Makefile'  and the  `src' folder,  extracted  from  the
+`proj_50.zip' archive.  As a result,  a folder called `proj_50' will be created,
+and in it,  two other  folders,  `user'  and  `trs',  containg  the user and trs
+applications  along  with  their  respective  resources (images  and translation
+files), as well as the TCS application. The file tree can be seen below:
+
+  proj_50/
+  ├── tcs /* the tcs application */
+  ├── trs
+  │   ├── file_translation.txt /* file containing file name translations */
+  │   ├── mage.jpg /* files to send back to the user */
+  │   ├── pingu.jpg
+  │   ├── reaper.jpg
+  │   ├── text_translation.txt /* file containing text translations */
+  │   └── trs /* the trs application */
+  └── user
+      ├── tux_mage.png /* files to send to trs */
+      ├── tux.png
+      ├── tux_reaper.png
+      └── user /* the user application */
+
+
+### RUNNING ####################################################################
+
+1. Start the TCS application by issuing the command
+
+  `./tcs'
+
+once inside the proj_50 dir.  By default, the TCS will be bound to port 58050 of
+the machine it'll  be running  on.  The  port  can be overridden  using the `-p'
+option.  For example,  to bind the TCS to the port 58011,  the following command
+should be issued:
+
+  `./tcs -p 58011'
+
+2. Start the TRS application by issuing the command
+
+  `./trs <language>'
+
+once inside the proj_50/trs dir,  where `<language>' is  the language the TRS is
+serving translations for  (words and respective translations can be found in the
+`text_translation.txt' file  inside  proj_50/trs).  By default,  the TRS will be
+bound to port 59000 of the machine it'll be running on.  Similar to the behavior
+seen for the TCS above (2), the port can be overridden by using the `-p' option.
+
+The address and port of the TCS  to which the TRS is going  to send a request to
+register itself are, by default,  the machine it's running on's address and port
+58050,  both of which can be overridden  as well via the `-n'  and `-e'  options
+respectively.  For example,  in  order  to  connect  to the  TCS at the  address
+193.136.138.142 and port 58011, the following command should be issued:
+
+  `./trs <language> -n 193.136.138.142 -e 58011'
+
+If the TCS isn't online, the TRS will timeout in 5 seconds and exit. To stop the
+TRS,  in case it succeeded to register to the TCS,  an interrupt signal (SIGINT)
+should be issued (C-c) to the process. It'll handle it and attempt to deregister
+from the TCS it previously registered to.
+
+The TRS' testing language is German. So, for consistency purposes, the command
+to be issued should be similar to the follow:
+
+  `./trs German ...'
+
+3. Lastly, start the `user' application by issuing the command
+
+  `./user'.
+
+By default,  the user application will connect to the TCS using the machine it's
+running on's address and port 58050.  These can be overridden  by using the `-n'
+and `-p' options to change the default address and port of the TCS. For example,
+in order to connect  to the TCS at the address  tejo.tecnico.ulisboa.pt and port
+58011, the following command should be issued.
+
+  `./user -n tejo.tecnico.ulisboa.pt -p 58011'
+
+Note:  All of the applications  have  an  added  option `-h'  which prints out a
+usage and a small help message, briefly explaining how the application works and
+what arguments it takes.
+
+
+### USER - AVAILABLE COMMANDS ##################################################
+
+The user has the capability of executing two commands: `list' and `request'.
+
+
+## LIST COMMAND ################################################################
+
+The list command will  send a request to the TCS  for a list of languages it has
+a TRS available to translate words from  the language it serves into portuguese.
+For example, upon issuing
+
+  `list'
+
+the TCS will reply with the list of languages, if they're available. On the user
+end, they're displayed in the following format:
+
+   1 - language 1
+   2 - language 2
+   . . .
+   N - language N
+
+Upon receiving it,  the user can now  `request' a translation.  This translation
+could be a  text translation (plain text words) or a file  translation (any kind
+of binary file),  given either the words  or the file names are available on the
+TRS end.
+
+
+## REQUEST COMMAND - TEXT TRANSLATION ##########################################
+
+In order to request a text translation, the `request' command's format is as
+follows:
+
+  `request N t word1 word2 . . . wordn'
+
+where N is  the index  associated  with the language  as shown when  the  `list'
+command is issued. The user will ask the TCS for the TRS details of the language
+of index N  (which, in the generic  list example above,  is language N) and then
+communicate with the TRS,  sending the words and waiting for a response.  If the
+translation  was a  success,  meaning ever  word had an  available corresponding
+translation,  the translated words will be sent  and received on the user's end,
+being displayed as follows:
+
+  Translation successful: translated_word1 . . . translated_wordn
+
+
+## REQUEST COMMAND - FILE TRANSLATION ##########################################
+
+In order to request a text translation, the `request' command's format is as
+follows:
+
+  `request N f /path/to/file'
+
+where N, like in the text translation, is the index associated with the language
+as shown when the `list' command is issued. The communication process is similar
+with the difference that  the file will be split into seperate packets and sent,
+as well as received in a similar fashion.
+
+The name of the file  that is sent  is the  file's basename,  meaning that, if a
+path is passed,  only the filename at the  end of the path is sent as the file's
+name instead of the entire path to it.  Once received on the TRS end, the file's
+name will be  compared with  the files the  TRS  has  a  translation  for.  Upon
+success, a file will be sent back to the user. If it can't find the file's name,
+it'll return a message that the translation isn't available.
+
+Once the file is received on the user's end, the following message is displayed:
+
+  Translation successful: 'translated_filename' (n bytes)
+
+where n is the file's size in bytes.
+
+
+## EXIT COMMAND ################################################################
+
+In order to exit the user application,  the user can  manually type  the command
+
+  `exit'
+
+or,  if preferred,  send and EOF (C-d),  which will  print  the word  `exit' and
+produce the same effect.
