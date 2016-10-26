@@ -476,7 +476,6 @@ int main(int argc, char **argv) {
                   token = strtok_r(aux_token, " ", &aux_token); /* Next */
                 }
               }
-              fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
 
               /* Reached EOF, no translation available */
               if(feof(textfp)) {
@@ -491,6 +490,7 @@ int main(int argc, char **argv) {
               else {
                 printf("[%s] Text translation successful\n", UTRS_TRANSLATE_RSP);
               }
+              fseek(textfp, 0L, SEEK_SET); /* Reset cursor to start */
 
               strcat(send_buffer, "\n"); /* Terminator (cork) */
               /* Send of translation (or error, if NTA) */
@@ -499,11 +499,11 @@ int main(int argc, char **argv) {
             else {
               FILE *sendfp = NULL; /* File pointer to file to send */
               char *file; /* Pointer to translated file name */
+              char *translation; /* Pointer to translation of 'file' */
               size_t filesize, bytessent = 0; /* Number of bytes sent */
 
               while(fgets(line_buffer, sizeof(line_buffer) / sizeof(char),
                   filesfp) != NULL) {
-                char *translation; /* Pointer to translation of 'file' */
 
                 file = strtok(line_buffer, " "); /* File's name in file */
                 translation = strtok(NULL, "\n");
@@ -528,7 +528,7 @@ int main(int argc, char **argv) {
 
                     if(filesize > 0) {
                       sprintf(send_buffer, "%s %s", send_buffer,
-                        basename(file));
+                        basename(translation));
 
                       sprintf(send_buffer, "%s %zd ", send_buffer, filesize);
                       if(rwrite(userfd, send_buffer, strlen(send_buffer)) == -1)
@@ -581,7 +581,7 @@ int main(int argc, char **argv) {
               }
               else {
                 printf("[%s] File \'%s\' sent successfully: Sent %zd bytes\n",
-                  UTRS_TRANSLATE_RSP, file, bytessent);
+                  UTRS_TRANSLATE_RSP, translation, bytessent);
               }
               /* Couldn't send the entire file */
             }
