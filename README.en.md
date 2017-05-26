@@ -1,4 +1,4 @@
-# RC Translate <span style="font-size:0.35em">[PT](README.md)</span>
+# RC Translate [PT](README.md)
 ### RC Project - 16'17
 
 ---
