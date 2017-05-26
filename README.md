@@ -1,4 +1,4 @@
-# Tradução RC <span style="font-size:0.35em">[EN](README.en.md)</span>
+# Tradução RC [EN](README.en.md)
 ### Projecto de RC - 16'17
 
 ---
